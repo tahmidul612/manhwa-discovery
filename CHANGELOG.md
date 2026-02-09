@@ -8,12 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - Comprehensive documentation suite (README, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, CHANGELOG)
 - Visual attributions for Claude Code, MangaDex, and AniList
 - Security policy and vulnerability reporting guidelines
 - Contributor guidelines with conventional commit standards
 
 ### Changed
+
 - Enhanced README with improved UX/UI and table of contents
 - Updated project documentation with badges and visual elements
 
@@ -22,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 #### Core Features
+
 - **AniList Integration**: OAuth2 authentication and GraphQL API integration
 - **MangaDex Integration**: REST API client with rate limiting and retry logic
 - **Fuzzy Matching Engine**: 5-stage confidence scoring system (0.80-1.00) for automatic manga linking
@@ -32,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Auto-Sync**: Automatic fuzzy matching of entire AniList library with MangaDex
 
 #### Backend
+
 - FastAPI server with async/await architecture
 - Motor (async MongoDB driver) for database operations
 - Redis integration for L1 caching
@@ -43,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Lifespan management for startup/shutdown tasks
 
 #### Frontend
+
 - React 18 with Vite for fast development
 - Tailwind CSS with custom glass-morphism theme
 - Zustand for state management with localStorage persistence
@@ -55,6 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Authentication flow with OAuth callback handling
 
 #### Infrastructure
+
 - Docker Compose setup for development
 - Multi-stage Dockerfiles for backend and frontend
 - MongoDB initialization script with indexes
@@ -63,6 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Environment configuration via .env files
 
 #### Documentation
+
 - Project README with setup instructions
 - Backend and Frontend knowledge bases (AGENTS.md)
 - Environment configuration examples
@@ -71,6 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Technical Details
 
 #### Fuzzy Matching Algorithm
+
 - **Stage 1**: Exact match (normalized) → 1.00 confidence
 - **Stage 2**: High fuzzy (>95% similarity) → 0.95 confidence
 - **Stage 3**: Strong fuzzy (>85%) + year validation (±1yr) → 0.90 confidence
@@ -80,12 +88,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Auto-matches at ≥0.85 confidence; <0.70 rejected; 0.70-0.85 manual review.
 
 #### Cache Strategy
+
 - **Redis L1**: Fast in-memory cache (5-60 min TTL)
 - **MongoDB L2**: Persistent cache with TTL indexes (30 min - 24 hr)
 - **Graceful Fallback**: Automatic fallback to MongoDB-only if Redis unavailable
 - **Pattern Invalidation**: Wildcard-based cache invalidation for user data updates
 
 #### Rate Limiting
+
 - MangaDex: 5 requests/second with exponential backoff
 - Retry logic: 2^attempt seconds, max 3 retries on 429 errors
 
@@ -105,6 +115,7 @@ Auto-matches at ≥0.85 confidence; <0.70 rejected; 0.70-0.85 manual review.
 This is the initial release of Manhwa Discovery, a unified manga/manhwa discovery platform that bridges AniList and MangaDex. The project provides a seamless way to manage your manga collection across both platforms with intelligent fuzzy matching and caching.
 
 **Highlights:**
+
 - 🔗 Connect your AniList account and automatically link entries to MangaDex
 - 🔍 Search across both platforms simultaneously
 - 🎯 Smart fuzzy matching with 5-stage confidence scoring
@@ -112,17 +123,20 @@ This is the initial release of Manhwa Discovery, a unified manga/manhwa discover
 - 🎨 Beautiful glass-morphism UI with dark mode
 
 **Getting Started:**
+
 1. Clone the repository
 2. Copy `.env.example` to `.env` and add your AniList OAuth credentials
 3. Run `docker compose up`
-4. Visit http://localhost:3009
+4. Visit <http://localhost:3009>
 
 **Known Issues:**
+
 - Tests are stubbed but not implemented
 - OAuth tokens not encrypted (low priority for personal use)
 - Rate limiting only on external APIs
 
 **Next Steps:**
+
 - Implement comprehensive test suite
 - Add token encryption
 - Expand rate limiting
