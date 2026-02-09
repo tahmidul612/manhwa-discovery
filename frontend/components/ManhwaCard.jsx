@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Star, BookOpen, Calendar, Link2, LinkIcon, Unlink, Wrench, Loader2 } from 'lucide-react';
+import { Star, BookOpen, Link2, LinkIcon, Unlink, Wrench, Loader2 } from 'lucide-react';
 
 const STATUS_BADGES = {
   READING: 'badge-reading',
@@ -56,92 +56,88 @@ export default function ManhwaCard({ manhwa, onHover, onLink, onUnlink, onFixLin
           </div>
         )}
 
-        {/* Source badge */}
-        <div className="absolute top-2 left-2">
+        {/* Top row: source + status */}
+        <div className="absolute top-2 left-2 right-2 flex items-start justify-between">
           <span className="px-2 py-0.5 rounded-full text-[10px] font-medium glass">
             {manhwa.source === 'mangadex' ? 'MangaDex' : 'AniList'}
           </span>
-        </div>
-
-        {/* User status badge */}
-        {userStatus && (
-          <div className="absolute top-2 right-2">
+          {userStatus && (
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${STATUS_BADGES[userStatus] || ''}`}>
               {userStatus}
             </span>
-          </div>
-        )}
-
-        {/* Link actions */}
-        <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          {isLinked ? (
-            <>
-              {onFixLink && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onFixLink(manhwa); }}
-                  className="p-1.5 rounded-lg glass hover:bg-yellow-500/20 transition-colors"
-                  aria-label="Fix link"
-                  title="Fix Link"
-                >
-                  <Wrench className="w-3.5 h-3.5 text-yellow-400" />
-                </button>
-              )}
-              <button
-                onClick={(e) => { e.stopPropagation(); onUnlink?.(connectionId); }}
-                className="p-1.5 rounded-lg glass hover:bg-red-500/20 transition-colors"
-                aria-label="Unlink manga"
-                title="Unlink"
-              >
-                <Unlink className="w-3.5 h-3.5 text-red-400" />
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={(e) => { e.stopPropagation(); onLink?.(manhwa); }}
-              className="p-1.5 rounded-lg glass hover:bg-accent-primary/20 transition-colors"
-              aria-label="Link manga"
-              title="Link to MangaDex"
-            >
-              <LinkIcon className="w-3.5 h-3.5 text-accent-primary" />
-            </button>
           )}
+        </div>
+
+        {/* Bottom overlay: rating + link status + actions */}
+        <div className="absolute bottom-0 left-0 right-0 p-2.5 flex items-end justify-between">
+          <div className="flex items-center gap-2">
+            {rating && (
+              <span className="flex items-center gap-1 text-xs text-white font-medium">
+                <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                {rating}
+              </span>
+            )}
+            {isLinked && (
+              <span className="flex items-center gap-0.5 text-[10px] text-accent-primary font-medium">
+                <Link2 className="w-2.5 h-2.5" />
+                Linked
+              </span>
+            )}
+          </div>
+
+          {/* Link actions */}
+          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {isLinked ? (
+              <>
+                {onFixLink && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onFixLink(manhwa); }}
+                    className="p-1.5 rounded-lg glass hover:bg-yellow-500/20 transition-colors"
+                    aria-label="Fix link"
+                    title="Fix Link"
+                  >
+                    <Wrench className="w-3.5 h-3.5 text-yellow-400" />
+                  </button>
+                )}
+                <button
+                  onClick={(e) => { e.stopPropagation(); onUnlink?.(connectionId); }}
+                  className="p-1.5 rounded-lg glass hover:bg-red-500/20 transition-colors"
+                  aria-label="Unlink manga"
+                  title="Unlink"
+                >
+                  <Unlink className="w-3.5 h-3.5 text-red-400" />
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={(e) => { e.stopPropagation(); onLink?.(manhwa); }}
+                className="p-1.5 rounded-lg glass hover:bg-accent-primary/20 transition-colors"
+                aria-label="Link manga"
+                title="Link to MangaDex"
+              >
+                <LinkIcon className="w-3.5 h-3.5 text-accent-primary" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="p-3 space-y-1.5">
+      {/* Content — title + metadata */}
+      <div className="p-3 space-y-1">
         <h3 className="font-semibold text-sm leading-tight line-clamp-2 text-text-primary">
           {manhwa.title}
         </h3>
 
-        <div className="flex flex-wrap gap-3 text-xs text-text-secondary">
-          {rating && (
-            <span className="flex items-center gap-1" aria-label={`Rating: ${rating}`}>
-              <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
-              {rating}
-            </span>
-          )}
+        <div className="flex items-center gap-2 text-[11px] text-text-tertiary">
+          {year && <span>{year}</span>}
+          {year && chapters && <span>·</span>}
           {chapters && (
-            <span className="flex items-center gap-1" aria-label={`${chapters} chapters`}>
-              <BookOpen className="w-3.5 h-3.5" />
-              {chapters}
-            </span>
-          )}
-          {year && (
-            <span className="flex items-center gap-1" aria-label={`Year: ${year}`}>
-              <Calendar className="w-3.5 h-3.5" />
-              {year}
+            <span className="flex items-center gap-0.5">
+              <BookOpen className="w-3 h-3" />
+              {chapters} ch
             </span>
           )}
         </div>
-
-        {/* Link indicator */}
-        {isLinked && (
-          <div className="flex items-center gap-1 text-[10px] text-accent-primary">
-            <Link2 className="w-3 h-3" />
-            <span>Linked</span>
-          </div>
-        )}
       </div>
     </motion.div>
   );
