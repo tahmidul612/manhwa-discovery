@@ -122,6 +122,7 @@ The following are known security considerations in the current implementation:
 OAuth tokens from AniList are currently stored unencrypted in MongoDB. This is a known issue that will be addressed in a future update.
 
 **Mitigation**:
+
 - Tokens are stored server-side only (not exposed to frontend)
 - Database access is restricted
 - Future versions will implement token encryption
@@ -135,6 +136,7 @@ OAuth tokens from AniList are currently stored unencrypted in MongoDB. This is a
 Setting `DEBUG=true` exposes detailed error messages and stack traces. This is useful for development but **must be disabled in production**.
 
 **Mitigation**:
+
 - `.env.example` sets `DEBUG=false` by default
 - Documentation warns against enabling DEBUG in production
 - Error handlers return generic messages to clients when DEBUG is off
@@ -146,6 +148,7 @@ Setting `DEBUG=true` exposes detailed error messages and stack traces. This is u
 Rate limiting is implemented for external APIs (MangaDex) but not yet for all internal endpoints.
 
 **Mitigation**:
+
 - MangaDex client has built-in rate limiting (5 req/sec)
 - Middleware structure supports adding rate limiters
 - Future versions will add comprehensive rate limiting
@@ -169,15 +172,15 @@ Rate limiting is implemented for external APIs (MangaDex) but not yet for all in
 
 We recommend using these tools for security scanning:
 
-- **Backend**: 
+- **Backend**:
   - `bandit` for Python security linting
   - `safety` for dependency vulnerability scanning
   
-- **Frontend**: 
+- **Frontend**:
   - `npm audit` for JavaScript dependency vulnerabilities
   - `snyk` for comprehensive security scanning
 
-- **Containers**: 
+- **Containers**:
   - `trivy` for Docker image scanning
   - `docker scan` for vulnerability detection
 
