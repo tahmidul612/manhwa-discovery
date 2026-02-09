@@ -139,26 +139,42 @@ async def _enrich_with_connection(
         # Check if manga is in user's AniList list (uses cached data)
         parsed["user_list_status"] = None
         al_id = current_user.get("anilist_id")
-        check_media_id = anilist_id  # the AniList media ID to look for
+        check_media_id = anilist_id
         if al_id and check_media_id:
-            try:
-                lists = await anilist_client.get_user_manga_list(
-                    user_id=int(al_id),
-                    token=current_user.get("anilist_token")
-                )
-                for entries in lists.values():
-                    for entry in entries:
-                        if str(entry.get("media", {}).get("id")) == str(check_media_id):
-                            parsed["user_list_status"] = entry.get("status")
-                            parsed["user_list_progress"] = entry.get("progress")
-                            break
-            except Exception:
-                pass
+            al_list_map = await _get_user_anilist_map(current_user)
+            entry_data = al_list_map.get(str(check_media_id))
+            if entry_data:
+                parsed["user_list_status"] = entry_data["status"]
+                parsed["user_list_progress"] = entry_data["progress"]
     except Exception as e:
         logger.warning(f"Failed to enrich with connection: {e}")
         parsed["connection"] = None
         parsed["is_linked"] = False
     return parsed
+
+
+async def _get_user_anilist_map(current_user: dict) -> dict:
+    """Build a media_id -> {status, progress} map from user's cached AniList list."""
+    al_id = current_user.get("anilist_id")
+    if not al_id:
+        return {}
+    try:
+        lists = await anilist_client.get_user_manga_list(
+            user_id=int(al_id),
+            token=current_user.get("anilist_token")
+        )
+        result = {}
+        for entries in lists.values():
+            for entry in entries:
+                media_id = str(entry.get("media", {}).get("id", ""))
+                if media_id:
+                    result[media_id] = {
+                        "status": entry.get("status"),
+                        "progress": entry.get("progress"),
+                    }
+        return result
+    except Exception:
+        return {}
 
 
 def apply_filters(results: List[dict], filters: dict) -> List[dict]:
@@ -446,26 +462,8 @@ async def search_manhwa(
                 md_conn_map = {c["mangadex_id"]: c for c in connections}
                 al_conn_map = {c["anilist_id"]: c for c in connections}
 
-                # Build AniList media ID lookup from user's list
-                al_list_map = {}  # media_id -> {status, progress}
-                if current_user:
-                    al_id = current_user.get("anilist_id")
-                    if al_id:
-                        try:
-                            lists = await anilist_client.get_user_manga_list(
-                                user_id=int(al_id),
-                                token=current_user.get("anilist_token")
-                            )
-                            for entries in lists.values():
-                                for entry in entries:
-                                    media_id = str(entry.get("media", {}).get("id", ""))
-                                    if media_id:
-                                        al_list_map[media_id] = {
-                                            "status": entry.get("status"),
-                                            "progress": entry.get("progress"),
-                                        }
-                        except Exception:
-                            pass
+                # Build AniList media ID lookup from user's cached list
+                al_list_map = await _get_user_anilist_map(current_user) if current_user else {}
 
                 for item in merged:
                     conn = None

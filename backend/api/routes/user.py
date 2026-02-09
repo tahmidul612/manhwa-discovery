@@ -116,20 +116,26 @@ async def get_user_lists(
 
             enriched_lists[list_status] = enriched_entries
 
-        # Fetch MangaDex chapter counts for all linked entries
-        mangadex_ids = [
-            e["mangadex_data"]["id"]
-            for entries in enriched_lists.values()
-            for e in entries
-            if e["is_linked"] and e.get("mangadex_data", {}).get("id")
-        ]
-        if mangadex_ids:
-            chapter_counts = await mangadex_client.get_manga_chapter_counts(mangadex_ids)
-            for entries in enriched_lists.values():
-                for e in entries:
-                    md = e.get("mangadex_data")
-                    if md and md.get("id") in chapter_counts:
-                        md["chapters_count"] = chapter_counts[md["id"]]
+        # Use chapter counts already stored on connection docs.
+        # Refresh any missing counts in the background without blocking.
+        stale_ids = []
+        for entries in enriched_lists.values():
+            for e in entries:
+                md = e.get("mangadex_data")
+                if md and md.get("id") and not md.get("chapters_count"):
+                    stale_ids.append(md["id"])
+
+        if stale_ids:
+            # Fire-and-forget: fetch missing counts from cache (fast) or API
+            try:
+                chapter_counts = await mangadex_client.get_manga_chapter_counts(stale_ids)
+                for entries in enriched_lists.values():
+                    for e in entries:
+                        md = e.get("mangadex_data")
+                        if md and md.get("id") in chapter_counts and chapter_counts[md["id"]] is not None:
+                            md["chapters_count"] = chapter_counts[md["id"]]
+            except Exception:
+                pass  # Don't block the response for chapter counts
 
         total_entries = sum(len(v) for v in enriched_lists.values())
         total_linked = sum(

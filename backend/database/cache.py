@@ -203,8 +203,8 @@ class CacheService:
         Args:
             user_id: User ID
         """
-        # Clear Redis pattern
-        await self.invalidate_pattern(f"user:{user_id}:*", "anilist")
+        # Clear Redis pattern (matches cache keys like "anilist:user:{id}:list:*")
+        await self.invalidate_pattern(f"anilist:user:{user_id}:*", "anilist")
 
         # Clear MongoDB entries
         try:
