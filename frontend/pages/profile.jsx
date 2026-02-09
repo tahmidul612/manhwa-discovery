@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { User, BookOpen, Link2, LogIn } from 'lucide-react';
@@ -7,6 +8,7 @@ import UserListView from '../components/UserListView';
 
 export default function ProfilePage() {
   const { isAuthenticated, user, token, updateUser } = useAuthStore();
+  const [listStats, setListStats] = useState({ total_entries: null, total_linked: null });
 
   // Fetch fresh user data
   const { data: userData } = useQuery({
@@ -87,14 +89,14 @@ export default function ProfilePage() {
 
         {/* Stats row */}
         <div className="flex gap-6 mt-4 pt-4 border-t border-glass-border">
-          <Stat icon={BookOpen} label="Total Entries" value={displayUser?.total_entries || '—'} />
-          <Stat icon={Link2} label="Linked" value={displayUser?.total_linked || '—'} />
+          <Stat icon={BookOpen} label="Total Entries" value={listStats.total_entries ?? '—'} />
+          <Stat icon={Link2} label="Linked" value={listStats.total_linked ?? '—'} />
         </div>
       </motion.div>
 
       {/* User manga list */}
       {displayUser?.anilist_id && (
-        <UserListView userId={displayUser.anilist_id} />
+        <UserListView userId={displayUser.anilist_id} onStatsLoaded={setListStats} />
       )}
     </div>
   );

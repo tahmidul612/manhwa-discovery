@@ -70,6 +70,7 @@ async def anilist_callback(
                 {"anilist_id": anilist_id},
                 {"$set": {
                     "username": username,
+                    "avatar": anilist_user.get("avatar", {}).get("large"),
                     "anilist_token": access_token,
                     "anilist_token_expires": token_expires,
                     "refresh_token": refresh_token,
@@ -83,6 +84,7 @@ async def anilist_callback(
             result = await db.users.insert_one({
                 "anilist_id": anilist_id,
                 "username": username,
+                "avatar": anilist_user.get("avatar", {}).get("large"),
                 "anilist_token": access_token,
                 "anilist_token_expires": token_expires,
                 "refresh_token": refresh_token,
@@ -135,6 +137,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         "id": current_user["_id"],
         "anilist_id": current_user.get("anilist_id"),
         "username": current_user.get("username"),
+        "avatar": current_user.get("avatar"),
         "preferences": current_user.get("preferences", {}),
         "created_at": current_user.get("created_at")
     }

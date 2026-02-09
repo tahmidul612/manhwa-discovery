@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, Link2 } from 'lucide-react';
 import { apiClient } from '../services/api';
@@ -14,7 +14,7 @@ const STATUS_TABS = [
   { key: 'PLANNING', label: 'Plan to Read', badge: 'badge-planning' },
 ];
 
-export default function UserListView({ userId }) {
+export default function UserListView({ userId, onStatsLoaded }) {
   const [activeTab, setActiveTab] = useState('all');
   const queryClient = useQueryClient();
 
@@ -38,6 +38,16 @@ export default function UserListView({ userId }) {
       queryClient.invalidateQueries({ queryKey: ['userLists'] });
     },
   });
+
+  // Report stats to parent
+  useEffect(() => {
+    if (data && onStatsLoaded) {
+      onStatsLoaded({
+        total_entries: data.total_entries ?? 0,
+        total_linked: data.total_linked ?? 0,
+      });
+    }
+  }, [data, onStatsLoaded]);
 
   const lists = data?.lists || {};
 
