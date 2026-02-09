@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { RefreshCw, Link2 } from 'lucide-react';
+import { RefreshCw, Link2, SlidersHorizontal, ArrowUpDown } from 'lucide-react';
 import { apiClient } from '../services/api';
 import ManhwaCard from './ManhwaCard';
 import LinkManagementModal from './LinkManagementModal';
@@ -15,12 +15,71 @@ const STATUS_TABS = [
   { key: 'PLANNING', label: 'Plan to Read', badge: 'badge-planning' },
 ];
 
+const SORT_OPTIONS = [
+  { key: 'title_asc', label: 'Title A-Z' },
+  { key: 'title_desc', label: 'Title Z-A' },
+  { key: 'rating_desc', label: 'Highest Rating' },
+  { key: 'rating_asc', label: 'Lowest Rating' },
+  { key: 'progress_desc', label: 'Most Progress' },
+  { key: 'unread_desc', label: 'Most Unread' },
+  { key: 'chapters_desc', label: 'Most Chapters' },
+  { key: 'score_desc', label: 'Your Score (High)' },
+];
+
+const LINK_FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'linked', label: 'Linked' },
+  { key: 'unlinked', label: 'Unlinked' },
+];
+
+const DEFAULT_FILTERS = {
+  linkStatus: 'all',
+  minRating: 0,
+  minScore: 0,
+  minUnread: 0,
+  yearMin: '',
+  yearMax: '',
+};
+
+function hasActiveFilters(filters) {
+  return filters.linkStatus !== 'all'
+    || filters.minRating > 0
+    || filters.minScore > 0
+    || filters.minUnread > 0
+    || filters.yearMin !== ''
+    || filters.yearMax !== '';
+}
+
+function getEntryTitle(entry) {
+  const t = entry.media?.title;
+  return (t?.english || t?.romaji || t?.native || '').toLowerCase();
+}
+
+function getEntryRating(entry) {
+  return entry.media?.averageScore || 0;
+}
+
+function getEntryChapters(entry) {
+  return entry.mangadex_data?.chapters_count || entry.media?.chapters || 0;
+}
+
+function getEntryUnread(entry) {
+  const total = getEntryChapters(entry);
+  const progress = entry.progress || 0;
+  return Math.max(0, total - progress);
+}
+
 export default function UserListView({ userId, onStatsLoaded }) {
   const [activeTab, setActiveTab] = useState('all');
   const [linkModal, setLinkModal] = useState({ open: false, manhwa: null, mode: 'link' });
   const [autoLinking, setAutoLinking] = useState(false);
-  const [linkingEntryId, setLinkingEntryId] = useState(null); // anilist media id currently being linked
-  const [autoLinkResults, setAutoLinkResults] = useState(null); // { linked: n, failed: n, total: n }
+  const [linkingEntryId, setLinkingEntryId] = useState(null);
+  const [autoLinkResults, setAutoLinkResults] = useState(null);
+  const [sortBy, setSortBy] = useState('title_asc');
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
+
+  const updateFilter = (key, value) => setFilters((prev) => ({ ...prev, [key]: value }));
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
@@ -57,9 +116,72 @@ export default function UserListView({ userId, onStatsLoaded }) {
   const lists = data?.lists || {};
 
   // Flatten entries for display based on active tab
-  const displayList = activeTab === 'all'
+  const rawList = activeTab === 'all'
     ? Object.values(lists).flat()
     : lists[activeTab.toLowerCase()] || [];
+
+  // Apply filters and sorting
+  const displayList = useMemo(() => {
+    let filtered = [...rawList];
+
+    // Link status filter
+    if (filters.linkStatus === 'linked') {
+      filtered = filtered.filter((e) => e.is_linked);
+    } else if (filters.linkStatus === 'unlinked') {
+      filtered = filtered.filter((e) => !e.is_linked);
+    }
+
+    // Min rating (AniList averageScore is 0-100, displayed as /10)
+    if (filters.minRating > 0) {
+      const threshold = filters.minRating * 10;
+      filtered = filtered.filter((e) => (e.media?.averageScore || 0) >= threshold);
+    }
+
+    // Min user score
+    if (filters.minScore > 0) {
+      filtered = filtered.filter((e) => (e.score || 0) >= filters.minScore);
+    }
+
+    // Min unread chapters
+    if (filters.minUnread > 0) {
+      filtered = filtered.filter((e) => getEntryUnread(e) >= filters.minUnread);
+    }
+
+    // Year range
+    if (filters.yearMin !== '') {
+      const yr = Number(filters.yearMin);
+      filtered = filtered.filter((e) => (e.media?.startDate?.year || 0) >= yr);
+    }
+    if (filters.yearMax !== '') {
+      const yr = Number(filters.yearMax);
+      filtered = filtered.filter((e) => (e.media?.startDate?.year || 9999) <= yr);
+    }
+
+    // Sort
+    const [field, dir] = sortBy.split('_');
+    const asc = dir === 'asc' ? 1 : -1;
+
+    filtered.sort((a, b) => {
+      switch (field) {
+        case 'title':
+          return asc * getEntryTitle(a).localeCompare(getEntryTitle(b));
+        case 'rating':
+          return asc * (getEntryRating(a) - getEntryRating(b));
+        case 'progress':
+          return asc * ((a.progress || 0) - (b.progress || 0));
+        case 'unread':
+          return asc * (getEntryUnread(a) - getEntryUnread(b));
+        case 'chapters':
+          return asc * (getEntryChapters(a) - getEntryChapters(b));
+        case 'score':
+          return asc * ((a.score || 0) - (b.score || 0));
+        default:
+          return 0;
+      }
+    });
+
+    return filtered;
+  }, [rawList, filters, sortBy]);
 
   // Count entries per status
   const statusCounts = {};
@@ -70,7 +192,6 @@ export default function UserListView({ userId, onStatsLoaded }) {
 
   // Auto-link all unlinked entries one by one
   const handleAutoLinkAll = useCallback(async () => {
-    // Get ALL entries (not just currently displayed tab)
     const allEntries = Object.values(lists).flat();
     const unlinked = allEntries.filter((e) => !e.is_linked);
     if (unlinked.length === 0) return;
@@ -186,6 +307,156 @@ export default function UserListView({ userId, onStatsLoaded }) {
           );
         })}
       </div>
+
+      {/* Sort & Filter bar */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+            showFilters || hasActiveFilters(filters)
+              ? 'bg-accent-primary/20 text-accent-primary'
+              : 'glass hover:border-glass-highlight text-text-secondary'
+          }`}
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+          Filters
+          {hasActiveFilters(filters) && (
+            <span className="w-1.5 h-1.5 rounded-full bg-accent-primary" />
+          )}
+        </button>
+
+        {hasActiveFilters(filters) && (
+          <button
+            onClick={() => setFilters(DEFAULT_FILTERS)}
+            className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+          >
+            Clear all
+          </button>
+        )}
+
+        <div className="flex items-center gap-1.5 ml-auto">
+          <ArrowUpDown className="w-3.5 h-3.5 text-text-tertiary" />
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="bg-transparent text-sm text-text-secondary outline-none cursor-pointer"
+          >
+            {SORT_OPTIONS.map((opt) => (
+              <option key={opt.key} value={opt.key}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {displayList.length !== rawList.length && (
+          <span className="text-xs text-text-tertiary">
+            {displayList.length} of {rawList.length}
+          </span>
+        )}
+      </div>
+
+      {/* Filter panel (collapsible) */}
+      {showFilters && (
+        <div className="rounded-xl glass p-4 grid grid-cols-2 sm:grid-cols-3 gap-4">
+          {/* Link Status */}
+          <div>
+            <p className="text-xs text-text-tertiary mb-2 font-medium uppercase tracking-wider">Link Status</p>
+            <div className="flex gap-1.5 flex-wrap">
+              {LINK_FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  onClick={() => updateFilter('linkStatus', f.key)}
+                  className={`px-3 py-1 rounded-full text-xs transition-all ${
+                    filters.linkStatus === f.key
+                      ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary'
+                      : 'glass hover:border-glass-highlight text-text-secondary'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Min Rating */}
+          <div>
+            <p className="text-xs text-text-tertiary mb-2 font-medium uppercase tracking-wider">
+              Min Rating {filters.minRating > 0 && <span className="text-accent-primary">({filters.minRating}+)</span>}
+            </p>
+            <input
+              type="range"
+              min="0"
+              max="10"
+              step="0.5"
+              value={filters.minRating}
+              onChange={(e) => updateFilter('minRating', parseFloat(e.target.value))}
+              className="w-full accent-accent-primary"
+            />
+            <div className="flex justify-between text-[10px] text-text-tertiary mt-0.5">
+              <span>Any</span>
+              <span>10</span>
+            </div>
+          </div>
+
+          {/* Min User Score */}
+          <div>
+            <p className="text-xs text-text-tertiary mb-2 font-medium uppercase tracking-wider">
+              Min Your Score {filters.minScore > 0 && <span className="text-accent-primary">({filters.minScore}+)</span>}
+            </p>
+            <input
+              type="range"
+              min="0"
+              max="10"
+              step="1"
+              value={filters.minScore}
+              onChange={(e) => updateFilter('minScore', parseInt(e.target.value))}
+              className="w-full accent-accent-primary"
+            />
+            <div className="flex justify-between text-[10px] text-text-tertiary mt-0.5">
+              <span>Any</span>
+              <span>10</span>
+            </div>
+          </div>
+
+          {/* Min Unread */}
+          <div>
+            <p className="text-xs text-text-tertiary mb-2 font-medium uppercase tracking-wider">Min Unread Chapters</p>
+            <input
+              type="number"
+              min="0"
+              placeholder="0"
+              value={filters.minUnread || ''}
+              onChange={(e) => updateFilter('minUnread', parseInt(e.target.value) || 0)}
+              className="w-full px-3 py-1.5 rounded-lg glass text-sm bg-transparent outline-none focus:border-accent-primary"
+            />
+          </div>
+
+          {/* Year Range */}
+          <div className="col-span-2 sm:col-span-2">
+            <p className="text-xs text-text-tertiary mb-2 font-medium uppercase tracking-wider">Year Range</p>
+            <div className="flex gap-2 items-center">
+              <input
+                type="number"
+                min="1990"
+                max="2030"
+                placeholder="From"
+                value={filters.yearMin}
+                onChange={(e) => updateFilter('yearMin', e.target.value)}
+                className="w-24 px-3 py-1.5 rounded-lg glass text-sm bg-transparent outline-none focus:border-accent-primary"
+              />
+              <span className="text-text-tertiary text-xs">to</span>
+              <input
+                type="number"
+                min="1990"
+                max="2030"
+                placeholder="To"
+                value={filters.yearMax}
+                onChange={(e) => updateFilter('yearMax', e.target.value)}
+                className="w-24 px-3 py-1.5 rounded-lg glass text-sm bg-transparent outline-none focus:border-accent-primary"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Grid */}
       {isLoading ? (
