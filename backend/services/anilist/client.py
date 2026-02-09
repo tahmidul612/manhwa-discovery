@@ -82,6 +82,9 @@ class AniListClient:
 
             return result.get("data", {})
 
+        except httpx.HTTPStatusError as e:
+            logger.error(f"AniList API HTTP {e.response.status_code}: {e.response.text[:500]}")
+            raise
         except httpx.HTTPError as e:
             logger.error(f"AniList API request failed: {e}")
             raise
@@ -310,12 +313,30 @@ class AniListClient:
         if status:
             variables["status"] = status
 
-        result = await self._graphql_request(query, variables, token)
+        try:
+            result = await self._graphql_request(query, variables, token)
+        except Exception:
+            if token and user_id:
+                logger.warning("Token-based manga list request failed, retrying without token")
+                result = await self._graphql_request(query, variables, None)
+            else:
+                raise
+
+        # Map AniList status enum to user-friendly keys
+        ANILIST_STATUS_MAP = {
+            "CURRENT": "reading",
+            "COMPLETED": "completed",
+            "PAUSED": "paused",
+            "DROPPED": "dropped",
+            "PLANNING": "planning",
+            "REPEATING": "repeating",
+        }
 
         # Parse and group by status
         grouped_lists = {}
         for list_data in result.get("MediaListCollection", {}).get("lists", []):
-            list_status = list_data.get("status", list_data.get("name", "unknown")).lower()
+            raw_status = list_data.get("status", list_data.get("name", "unknown"))
+            list_status = ANILIST_STATUS_MAP.get(raw_status, raw_status.lower())
             grouped_lists[list_status] = list_data.get("entries", [])
 
         # Cache result

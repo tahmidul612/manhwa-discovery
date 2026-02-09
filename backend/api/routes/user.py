@@ -15,6 +15,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _verify_user_access(current_user: dict, user_id: str) -> None:
+    """Verify that user_id matches the current user's _id or anilist_id."""
+    if (current_user["_id"] != user_id
+            and str(current_user.get("anilist_id", "")) != str(user_id)):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+
 def _extract_cover_url(mangadex_data: dict) -> Optional[str]:
     """Extract cover URL from MangaDex manga data"""
     for rel in mangadex_data.get("relationships", []):
@@ -44,9 +51,16 @@ async def get_user_lists(
     Get user's AniList manga lists grouped by status,
     enriched with MangaDex data from existing connections.
     """
-    # Verify user is requesting their own data
-    if current_user["_id"] != user_id and current_user.get("anilist_id") != user_id:
-        raise HTTPException(status_code=403, detail="Access denied")
+    _verify_user_access(current_user, user_id)
+
+    # Map display status names to AniList MediaListStatus enum values
+    STATUS_TO_ANILIST = {
+        "READING": "CURRENT",
+        "COMPLETED": "COMPLETED",
+        "PAUSED": "PAUSED",
+        "DROPPED": "DROPPED",
+        "PLANNING": "PLANNING",
+    }
 
     try:
         # Get AniList user ID
@@ -56,10 +70,11 @@ async def get_user_lists(
 
         # Fetch manga list from AniList
         anilist_token = current_user.get("anilist_token")
+        anilist_status = STATUS_TO_ANILIST.get(status.upper(), status) if status else None
         lists = await anilist_client.get_user_manga_list(
             user_id=int(anilist_id),
             token=anilist_token,
-            status=status
+            status=anilist_status
         )
 
         # Enrich with MangaDex data from existing connections
@@ -115,8 +130,8 @@ async def get_user_lists(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to fetch user lists: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch user lists")
+        logger.error(f"Failed to fetch user lists: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch user lists: {e}")
 
 
 @router.post("/{user_id}/sync")
@@ -128,8 +143,8 @@ async def sync_user_list(
     Force sync with AniList, run auto-matching algorithm,
     and store/update connections in database.
     """
-    if current_user["_id"] != user_id:
-        raise HTTPException(status_code=403, detail="Access denied")
+    _verify_user_access(current_user, user_id)
+    mongo_id = current_user["_id"]
 
     try:
         anilist_id = current_user.get("anilist_id")
@@ -158,7 +173,7 @@ async def sync_user_list(
         # Get existing connections to avoid re-matching
         db = get_db()
         existing = await db.manhwa_connections.find(
-            {"user_id": ObjectId(user_id)}
+            {"user_id": ObjectId(mongo_id)}
         ).to_list(length=None)
         existing_anilist_ids = {str(c["anilist_id"]) for c in existing}
 
@@ -172,7 +187,7 @@ async def sync_user_list(
 
         # Run auto-matching on unmatched entries
         matched = await comparison_service.auto_match_user_list(
-            user_id=user_id,
+            user_id=mongo_id,
             anilist_list=unmatched
         )
 
@@ -186,7 +201,7 @@ async def sync_user_list(
                 attrs = md_data.get("attributes", {})
 
                 connection_doc = {
-                    "user_id": ObjectId(user_id),
+                    "user_id": ObjectId(mongo_id),
                     "anilist_id": str(media.get("id", "")),
                     "mangadex_id": md_data.get("id", ""),
                     "anilist_data": {
@@ -221,7 +236,7 @@ async def sync_user_list(
                 }
 
                 await db.manhwa_connections.update_one(
-                    {"user_id": ObjectId(user_id), "anilist_id": str(media.get("id", ""))},
+                    {"user_id": ObjectId(mongo_id), "anilist_id": str(media.get("id", ""))},
                     {"$set": connection_doc},
                     upsert=True
                 )
@@ -253,16 +268,16 @@ async def get_user_connections(
     current_user: dict = Depends(get_current_user)
 ):
     """Get paginated AniList-MangaDex connections for a user"""
-    if current_user["_id"] != user_id:
-        raise HTTPException(status_code=403, detail="Access denied")
+    _verify_user_access(current_user, user_id)
+    mongo_id = current_user["_id"]
 
     try:
         db = get_db()
 
-        total = await db.manhwa_connections.count_documents({"user_id": ObjectId(user_id)})
+        total = await db.manhwa_connections.count_documents({"user_id": ObjectId(mongo_id)})
 
         connections = await db.manhwa_connections.find(
-            {"user_id": ObjectId(user_id)}
+            {"user_id": ObjectId(mongo_id)}
         ).sort("updated_at", -1).skip(skip).limit(limit).to_list(length=limit)
 
         # Serialize ObjectIds
