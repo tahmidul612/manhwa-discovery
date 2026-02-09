@@ -351,6 +351,68 @@ class AniListClient:
         logger.info(f"Fetched manga list for user {user_id or 'me'}")
         return grouped_lists
 
+    async def get_trending_manga(self, page: int = 1, per_page: int = 20) -> Dict[str, Any]:
+        """Get trending manga from AniList sorted by TRENDING_DESC"""
+        cache_key = f"anilist:trending:{page}:{per_page}"
+        cached = await cache_service.get_with_fallback(cache_key, "anilist")
+        if cached:
+            return cached
+
+        query = """
+        query ($page: Int, $perPage: Int) {
+            Page(page: $page, perPage: $perPage) {
+                pageInfo { total currentPage lastPage hasNextPage perPage }
+                media(type: MANGA, sort: [TRENDING_DESC]) {
+                    id
+                    title { romaji english native }
+                    coverImage { large medium }
+                    description
+                    status
+                    chapters
+                    averageScore
+                    popularity
+                    startDate { year }
+                    genres
+                }
+            }
+        }
+        """
+
+        result = await self._graphql_request(query, {"page": page, "perPage": per_page})
+        await cache_service.set_cached(cache_key, result, CacheTTL.SEARCH_RESULTS, "anilist")
+        return result
+
+    async def get_popular_manga(self, page: int = 1, per_page: int = 20) -> Dict[str, Any]:
+        """Get popular manga from AniList sorted by POPULARITY_DESC"""
+        cache_key = f"anilist:popular:{page}:{per_page}"
+        cached = await cache_service.get_with_fallback(cache_key, "anilist")
+        if cached:
+            return cached
+
+        query = """
+        query ($page: Int, $perPage: Int) {
+            Page(page: $page, perPage: $perPage) {
+                pageInfo { total currentPage lastPage hasNextPage perPage }
+                media(type: MANGA, sort: [POPULARITY_DESC]) {
+                    id
+                    title { romaji english native }
+                    coverImage { large medium }
+                    description
+                    status
+                    chapters
+                    averageScore
+                    popularity
+                    startDate { year }
+                    genres
+                }
+            }
+        }
+        """
+
+        result = await self._graphql_request(query, {"page": page, "perPage": per_page})
+        await cache_service.set_cached(cache_key, result, CacheTTL.SEARCH_RESULTS, "anilist")
+        return result
+
     async def search_manga(self, query: str, page: int = 1, per_page: int = 20) -> Dict[str, Any]:
         """
         Search for manga on AniList

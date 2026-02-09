@@ -233,6 +233,54 @@ def deduplicate_results(mangadex_results: List[dict], anilist_results: List[dict
 
 # --- Endpoints ---
 
+@router.get("/trending")
+async def get_trending_manga(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=50),
+):
+    """Get trending manga from AniList"""
+    try:
+        result = await anilist_client.get_trending_manga(page, per_page)
+        media_list = result.get("Page", {}).get("media", [])
+        page_info = result.get("Page", {}).get("pageInfo", {})
+
+        parsed = [_parse_anilist_manga(m) for m in media_list]
+        return {
+            "results": parsed,
+            "total": page_info.get("total", 0),
+            "page": page,
+            "per_page": per_page,
+            "has_next": page_info.get("hasNextPage", False),
+        }
+    except Exception as e:
+        logger.error(f"Failed to fetch trending: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch trending manga")
+
+
+@router.get("/popular")
+async def get_popular_manga(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=50),
+):
+    """Get popular manga from AniList"""
+    try:
+        result = await anilist_client.get_popular_manga(page, per_page)
+        media_list = result.get("Page", {}).get("media", [])
+        page_info = result.get("Page", {}).get("pageInfo", {})
+
+        parsed = [_parse_anilist_manga(m) for m in media_list]
+        return {
+            "results": parsed,
+            "total": page_info.get("total", 0),
+            "page": page,
+            "per_page": per_page,
+            "has_next": page_info.get("hasNextPage", False),
+        }
+    except Exception as e:
+        logger.error(f"Failed to fetch popular: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch popular manga")
+
+
 @router.get("/search")
 async def search_manhwa(
     query: str = Query(..., min_length=1, description="Search query"),

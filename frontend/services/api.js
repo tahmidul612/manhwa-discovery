@@ -32,6 +32,12 @@ export const apiClient = {
   getLoginUrl: () => api.get('/auth/anilist/login'),
   getMe: () => api.get('/auth/me'),
 
+  // Trending & Popular
+  getTrending: (page = 1, perPage = 20) =>
+    api.get('/manhwa/trending', { params: { page, per_page: perPage } }),
+  getPopular: (page = 1, perPage = 20) =>
+    api.get('/manhwa/popular', { params: { page, per_page: perPage } }),
+
   // Search
   searchManhwa: (query, filters = {}) =>
     api.get('/manhwa/search', { params: { query, ...filters } }),

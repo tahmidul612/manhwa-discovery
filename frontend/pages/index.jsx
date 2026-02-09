@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Search, TrendingUp, BookOpen, Sparkles } from 'lucide-react';
+import { Search, TrendingUp, BookOpen, Sparkles, Flame } from 'lucide-react';
 import { apiClient } from '../services/api';
 import ManhwaCard from '../components/ManhwaCard';
 import { SkeletonGrid } from '../components/SkeletonCard';
@@ -11,9 +11,16 @@ export default function HomePage() {
   const [heroQuery, setHeroQuery] = useState('');
   const navigate = useNavigate();
 
-  const { data: trending, isLoading } = useQuery({
+  const { data: trending, isLoading: trendingLoading } = useQuery({
     queryKey: ['trending'],
-    queryFn: () => apiClient.searchManhwa('', { sort_by: 'rating', per_page: 10 }),
+    queryFn: () => apiClient.getTrending(1, 10),
+    select: (res) => res.data?.results || [],
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const { data: popular, isLoading: popularLoading } = useQuery({
+    queryKey: ['popular'],
+    queryFn: () => apiClient.getPopular(1, 10),
     select: (res) => res.data?.results || [],
     staleTime: 10 * 60 * 1000,
   });
@@ -77,14 +84,14 @@ export default function HomePage() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-accent-primary/5 rounded-full blur-3xl pointer-events-none" />
       </section>
 
-      {/* Trending / Top Rated Section */}
+      {/* Trending Section */}
       <section className="space-y-6">
         <div className="flex items-center gap-3">
           <TrendingUp className="w-5 h-5 text-accent-primary" />
-          <h2 className="text-xl font-semibold">Top Rated</h2>
+          <h2 className="text-xl font-semibold">Trending Now</h2>
         </div>
 
-        {isLoading ? (
+        {trendingLoading ? (
           <SkeletonGrid count={10} />
         ) : trending?.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
@@ -95,7 +102,30 @@ export default function HomePage() {
         ) : (
           <div className="text-center py-12 text-text-secondary">
             <BookOpen className="w-8 h-8 mx-auto mb-3 opacity-50" />
-            <p>No trending manga found. Try searching above!</p>
+            <p>No trending manga found.</p>
+          </div>
+        )}
+      </section>
+
+      {/* Popular Section */}
+      <section className="space-y-6">
+        <div className="flex items-center gap-3">
+          <Flame className="w-5 h-5 text-orange-400" />
+          <h2 className="text-xl font-semibold">Most Popular</h2>
+        </div>
+
+        {popularLoading ? (
+          <SkeletonGrid count={10} />
+        ) : popular?.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {popular.map((manhwa) => (
+              <ManhwaCard key={manhwa.id} manhwa={manhwa} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 text-text-secondary">
+            <BookOpen className="w-8 h-8 mx-auto mb-3 opacity-50" />
+            <p>No popular manga found.</p>
           </div>
         )}
       </section>
