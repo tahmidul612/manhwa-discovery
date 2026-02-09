@@ -1,27 +1,70 @@
 // API client for backend communication
-// TODO: Implement API client with fetch/axios
+import axios from 'axios';
 
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  timeout: 30000,
+});
 
-class APIClient {
-  constructor() {
-    this.baseURL = 'http://localhost:8000';
+// Add auth token to requests
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('auth_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
+  return config;
+});
 
-  async searchManhwa(query, filters) {
-    // TODO: Implement search
+// Handle auth errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('auth_token');
+      // Could redirect to login here
+    }
+    return Promise.reject(error);
   }
+);
 
-  async getManhwaDetails(id) {
-    // TODO: Implement get details
-  }
+export const apiClient = {
+  // Auth
+  getLoginUrl: () => api.get('/auth/anilist/login'),
+  getMe: () => api.get('/auth/me'),
 
-  async getUserList(userId) {
-    // TODO: Implement get user list
-  }
+  // Search
+  searchManhwa: (query, filters = {}) =>
+    api.get('/manhwa/search', { params: { query, ...filters } }),
 
-  async compareWithList(manhwaId) {
-    // TODO: Implement comparison
-  }
-}
+  // Manhwa details
+  getManhwaDetails: (id, source = 'mangadex') =>
+    api.get(`/manhwa/${id}`, { params: { source } }),
 
-export default new APIClient();
+  // Chapters
+  getChapters: (manhwaId, lang = 'en', page = 1, perPage = 50) =>
+    api.get(`/manhwa/${manhwaId}/chapters`, { params: { lang, page, per_page: perPage } }),
+
+  // User lists
+  getUserLists: (userId, status = null) =>
+    api.get(`/users/${userId}/lists`, { params: status ? { status } : {} }),
+
+  // Sync
+  syncUserList: (userId) =>
+    api.post(`/users/${userId}/sync`),
+
+  // Connections
+  getUserConnections: (userId, skip = 0, limit = 20) =>
+    api.get(`/users/${userId}/connections`, { params: { skip, limit } }),
+
+  createConnection: (data) =>
+    api.post('/manhwa/connect', data),
+
+  removeConnection: (connectionId) =>
+    api.delete(`/manhwa/connect/${connectionId}`),
+
+  // Add to AniList
+  addToAniList: (data) =>
+    api.post('/manhwa/anilist/add', data),
+};
+
+export default apiClient;

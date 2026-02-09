@@ -1,15 +1,24 @@
-// Local storage utilities
-// TODO: Implement storage helpers
+export function saveToStorage(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Storage full or unavailable
+  }
+}
 
+export function getFromStorage(key, fallback = null) {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
-export const saveToStorage = (key, value) => {
-  // TODO: Save to localStorage
-};
-
-export const getFromStorage = (key) => {
-  // TODO: Get from localStorage
-};
-
-export const removeFromStorage = (key) => {
-  // TODO: Remove from localStorage
-};
+export function removeFromStorage(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Storage unavailable
+  }
+}

@@ -1,19 +1,20 @@
-// Authentication service
-// TODO: Implement authentication logic
+// Auth service - delegates to useAuthStore for state management.
+// This module provides standalone helpers for non-component contexts.
 
+const API_URL = import.meta.env?.VITE_API_URL || 'http://localhost:8000';
 
-export const login = async (credentials) => {
-  // TODO: Implement login
-};
+export function getLoginUrl() {
+  return `${API_URL}/auth/anilist/login`;
+}
 
-export const logout = () => {
-  // TODO: Implement logout
-};
+export function getAuthToken() {
+  return localStorage.getItem('auth_token');
+}
 
-export const getAuthToken = () => {
-  // TODO: Get stored token
-};
+export function isAuthenticated() {
+  return !!getAuthToken();
+}
 
-export const isAuthenticated = () => {
-  // TODO: Check authentication status
-};
+export function logout() {
+  localStorage.removeItem('auth_token');
+}
