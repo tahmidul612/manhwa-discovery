@@ -1,18 +1,95 @@
-# Manhwa Discovery
+<div align="center">
+
+# 📚 Manhwa Discovery
+
+### *Bridge Your Reading Lists Across Platforms*
 
 Unified manga/manhwa discovery platform that bridges your AniList reading lists with MangaDex's catalog. Search, link, filter, and manage your collection from one place.
 
-## Features
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactjs.org/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=for-the-badge&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+[![Redis](https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+[![Python 3.14](https://img.shields.io/badge/Python-3.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 
-- **AniList Integration** - View your manga lists grouped by status (reading, completed, on hold, dropped, planning) via AniList OAuth
-- **MangaDex Linking** - Connect AniList entries to MangaDex manga with automatic fuzzy matching; manually link, unlink, or relink at any time
-- **Global Search** - Search across your AniList library and MangaDex simultaneously with fuzzy matching on primary and alternative titles
-- **Smart Matching** - Automatic confidence-scored matching between AniList and MangaDex using title similarity and release date comparison
-- **Sort & Filter** - Sort by rating, chapter count, release date, or latest update; filter by chapters, rating, date ranges, and unread count
-- **Add to AniList** - Add manga to your AniList directly from search results, automatically preserving the MangaDex link
-- **Caching** - Two-tier cache (Redis + MongoDB TTL) minimizes API calls to both platforms
+</div>
 
-## Tech Stack
+---
+
+## 📖 Table of Contents
+
+- [Features](#-features)
+- [Attributions & Credits](#-attributions--credits)
+- [Tech Stack](#-tech-stack)
+- [Project Structure](#-project-structure)
+- [Quick Start](#-quick-start)
+- [Development](#-development)
+- [API Endpoints](#-api-endpoints)
+- [External APIs](#-external-apis)
+- [Environment Variables](#-environment-variables)
+- [Contributing](#-contributing)
+- [License](#-license)
+
+## ✨ Features
+
+- 🔗 **AniList Integration** - View your manga lists grouped by status (reading, completed, on hold, dropped, planning) via AniList OAuth
+- 📘 **MangaDex Linking** - Connect AniList entries to MangaDex manga with automatic fuzzy matching; manually link, unlink, or relink at any time
+- 🔍 **Global Search** - Search across your AniList library and MangaDex simultaneously with fuzzy matching on primary and alternative titles
+- 🎯 **Smart Matching** - Automatic confidence-scored matching between AniList and MangaDex using title similarity and release date comparison
+- 🎛️ **Sort & Filter** - Sort by rating, chapter count, release date, or latest update; filter by chapters, rating, date ranges, and unread count
+- ➕ **Add to AniList** - Add manga to your AniList directly from search results, automatically preserving the MangaDex link
+- ⚡ **Caching** - Two-tier cache (Redis + MongoDB TTL) minimizes API calls to both platforms
+
+---
+
+## 🙏 Attributions & Credits
+
+<div align="center">
+
+### Built With & Powered By
+
+This project wouldn't exist without the incredible work of these platforms and tools:
+
+<table>
+<tr>
+<td align="center" width="33%">
+<img src="https://raw.githubusercontent.com/anthropics/anthropic-sdk-python/main/assets/anthropic-logo.svg" alt="Claude" width="120" height="120" style="margin: 20px 0;"><br>
+<h3>🤖 Claude Code</h3>
+<p><strong>AI-Powered Development</strong></p>
+<p>This project was built with assistance from Claude, Anthropic's AI assistant. Claude Code helped architect the codebase, implement fuzzy matching algorithms, and ensure best practices throughout development.</p>
+<a href="https://claude.ai" target="_blank">Learn More →</a>
+</td>
+<td align="center" width="33%">
+<img src="https://mangadex.org/img/brand/mangadex-logo.svg" alt="MangaDex" width="120" height="120" style="margin: 20px 0;"><br>
+<h3>📚 MangaDex</h3>
+<p><strong>Manga Database & API</strong></p>
+<p>MangaDex provides the comprehensive manga catalog, chapter information, and cover images that power this platform. Their free and open API makes cross-platform manga discovery possible.</p>
+<a href="https://mangadex.org" target="_blank">Visit MangaDex →</a>
+</td>
+<td align="center" width="33%">
+<img src="https://anilist.co/img/icons/android-chrome-512x512.png" alt="AniList" width="120" height="120" style="margin: 20px 0;"><br>
+<h3>📖 AniList</h3>
+<p><strong>Anime & Manga Tracking</strong></p>
+<p>AniList's OAuth2 integration and GraphQL API enable seamless user authentication and access to personal manga libraries. Their platform is the foundation for user data in this application.</p>
+<a href="https://anilist.co" target="_blank">Visit AniList →</a>
+</td>
+</tr>
+</table>
+
+### 📜 Data Usage & Attribution
+
+- **MangaDex**: All manga metadata, cover images, and chapter information are provided by [MangaDex](https://mangadex.org) under their [Terms of Service](https://mangadex.org/terms).
+- **AniList**: User data and manga information are accessed via the [AniList API](https://anilist.gitbook.io/anilist-apiv2-docs/) with user consent through OAuth2.
+- **Claude Code**: Development assistance and code architecture provided by [Anthropic's Claude](https://claude.ai).
+
+> **Important**: This is an unofficial fan project. It is not affiliated with, endorsed by, or connected to MangaDex or AniList. All trademarks and service marks are the property of their respective owners.
+
+</div>
+
+---
+
+## 🛠️ Tech Stack
 
 | Layer | Tech |
 | ------- | ------ |
@@ -24,7 +101,7 @@ Unified manga/manhwa discovery platform that bridges your AniList reading lists 
 | Auth | AniList OAuth2, JWT sessions |
 | Infra | Docker, docker compose |
 
-## Project Structure
+## 📁 Project Structure
 
 ```text
 manhwa-discovery/
@@ -61,7 +138,7 @@ manhwa-discovery/
 └── .env.example               # Environment template
 ```
 
-## Quick Start
+## 🚀 Quick Start
 
 ### Prerequisites
 
@@ -98,7 +175,7 @@ The backend waits for MongoDB and Redis health checks before starting. On first 
 curl http://localhost:8009/health
 ```
 
-## Development
+## 💻 Development
 
 ### Backend (without Docker)
 
@@ -134,7 +211,7 @@ docker compose up --build
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
-## API Endpoints
+## 🔌 API Endpoints
 
 ### Auth
 
@@ -161,12 +238,12 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 - `GET /health` - Service health (DB + cache status)
 
-## External APIs
+## 🌐 External APIs
 
 - **MangaDex**: <https://api.mangadex.org/docs/>
 - **AniList GraphQL**: <https://anilist.gitbook.io/anilist-apiv2-docs/>
 
-## Environment Variables
+## ⚙️ Environment Variables
 
 See [`.env.example`](.env.example) for the full list. Key variables:
 
@@ -177,3 +254,44 @@ See [`.env.example`](.env.example) for the full list. Key variables:
 | `ANILIST_CLIENT_ID` | AniList OAuth app client ID |
 | `ANILIST_CLIENT_SECRET` | AniList OAuth app client secret |
 | `JWT_SECRET` | Secret for signing JWT tokens |
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for:
+
+- Development environment setup
+- Code standards and style guide
+- Pull request process
+- Commit message conventions
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🔒 Security
+
+For information about reporting security vulnerabilities, please see our [SECURITY.md](SECURITY.md).
+
+---
+
+## 📞 Support & Community
+
+- 🐛 **Bug Reports**: [Open an issue](https://github.com/tahmidul612/manhwa-discovery/issues)
+- 💡 **Feature Requests**: [Start a discussion](https://github.com/tahmidul612/manhwa-discovery/discussions)
+- 📖 **Documentation**: Check the [`AGENTS.md`](AGENTS.md) knowledge base for technical details
+
+---
+
+<div align="center">
+
+**Made with ❤️ by the Manhwa Discovery team**
+
+*Powered by Claude Code, MangaDex, and AniList*
+
+</div>
