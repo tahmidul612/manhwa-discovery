@@ -251,41 +251,29 @@ class ComparisonService:
 
         # Search MangaDex with each title variation
         for search_title in search_titles:
-            try:
-                results = await mangadex_client.search_manga(
-                    query=search_title,
-                    limit=search_limit
+            best_match, best_confidence = await self._search_and_score(
+                search_title, search_limit, title, media, anilist_year,
+                best_match, best_confidence
+            )
+            if best_confidence >= 1.0:
+                break
+
+        # If no good match found, try English synonyms as fallback
+        if best_confidence < 0.70:
+            english_synonyms = self._get_english_synonyms(media.get("synonyms", []))
+            # Avoid re-searching titles we already tried
+            tried = {t.lower() for t in search_titles}
+            for synonym in english_synonyms:
+                if synonym.lower() in tried:
+                    continue
+                tried.add(synonym.lower())
+                logger.debug(f"Retrying with English synonym: {synonym}")
+                best_match, best_confidence = await self._search_and_score(
+                    synonym, search_limit, title, media, anilist_year,
+                    best_match, best_confidence
                 )
-
-                for result in results.get("data", []):
-                    attributes = result.get("attributes", {})
-                    md_title = attributes.get("title", {}).get("en", "")
-                    md_alts = list(attributes.get("altTitles", [{}])[0].values()) if attributes.get("altTitles") else []
-                    md_year = attributes.get("year")
-
-                    # Calculate confidence
-                    confidence = self.match_titles(
-                        mangadex_title=md_title,
-                        mangadex_alts=md_alts,
-                        anilist_title=title,
-                        anilist_synonyms=media.get("synonyms", []),
-                        mangadex_year=md_year,
-                        anilist_year=anilist_year
-                    )
-
-                    if confidence > best_confidence:
-                        best_confidence = confidence
-                        best_match = result
-
-                    # Early exit if perfect match
-                    if confidence >= 1.0:
-                        break
-
-                if best_confidence >= 1.0:
+                if best_confidence >= 0.70:
                     break
-
-            except Exception as e:
-                logger.error(f"Error searching MangaDex for '{search_title}': {e}")
 
         if best_match and best_confidence >= 0.70:
             logger.info(f"Found match for '{search_titles[0]}' with confidence {best_confidence:.2f}")
@@ -293,6 +281,63 @@ class ComparisonService:
 
         logger.info(f"No suitable match found for '{search_titles[0]}' (best: {best_confidence:.2f})")
         return None
+
+    @staticmethod
+    def _is_english(text: str) -> bool:
+        """Check if text is primarily Latin/English characters"""
+        if not text:
+            return False
+        latin_count = sum(1 for c in text if c.isascii() and c.isalpha())
+        alpha_count = sum(1 for c in text if c.isalpha())
+        return alpha_count > 0 and latin_count / alpha_count > 0.5
+
+    def _get_english_synonyms(self, synonyms: List[str]) -> List[str]:
+        """Filter synonyms to only English/Latin-character names"""
+        return [s for s in (synonyms or []) if self._is_english(s)]
+
+    async def _search_and_score(
+        self,
+        search_title: str,
+        search_limit: int,
+        anilist_title: Dict[str, Optional[str]],
+        media: Dict[str, Any],
+        anilist_year: Optional[int],
+        best_match: Optional[Dict[str, Any]],
+        best_confidence: float,
+    ) -> Tuple[Optional[Dict[str, Any]], float]:
+        """Search MangaDex for a title and score results against AniList data."""
+        try:
+            results = await mangadex_client.search_manga(
+                query=search_title,
+                limit=search_limit
+            )
+
+            for result in results.get("data", []):
+                attributes = result.get("attributes", {})
+                md_title = attributes.get("title", {}).get("en", "")
+                md_alts = list(attributes.get("altTitles", [{}])[0].values()) if attributes.get("altTitles") else []
+                md_year = attributes.get("year")
+
+                confidence = self.match_titles(
+                    mangadex_title=md_title,
+                    mangadex_alts=md_alts,
+                    anilist_title=anilist_title,
+                    anilist_synonyms=media.get("synonyms", []),
+                    mangadex_year=md_year,
+                    anilist_year=anilist_year
+                )
+
+                if confidence > best_confidence:
+                    best_confidence = confidence
+                    best_match = result
+
+                if confidence >= 1.0:
+                    break
+
+        except Exception as e:
+            logger.error(f"Error searching MangaDex for '{search_title}': {e}")
+
+        return best_match, best_confidence
 
     async def auto_match_user_list(
         self,
