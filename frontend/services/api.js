@@ -38,6 +38,12 @@ export const apiClient = {
   getPopular: (page = 1, perPage = 20) =>
     api.get('/manhwa/popular', { params: { page, per_page: perPage } }),
 
+  // Browse & Metadata
+  browseManhwa: (filters = {}) =>
+    api.get('/manhwa/browse', { params: filters }),
+  getGenres: () => api.get('/manhwa/genres'),
+  getTags: () => api.get('/manhwa/tags'),
+
   // Search
   searchManhwa: (query, filters = {}) =>
     api.get('/manhwa/search', { params: { query, ...filters } }),

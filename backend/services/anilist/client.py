@@ -413,6 +413,145 @@ class AniListClient:
         await cache_service.set_cached(cache_key, result, CacheTTL.SEARCH_RESULTS, "anilist")
         return result
 
+    async def get_genre_collection(self) -> List[str]:
+        """Get all available genres from AniList"""
+        cache_key = "anilist:genres"
+        cached = await cache_service.get_with_fallback(cache_key, "anilist")
+        if cached:
+            return cached
+
+        query = "query { GenreCollection }"
+        result = await self._graphql_request(query)
+        genres = result.get("GenreCollection", [])
+        await cache_service.set_cached(cache_key, genres, 86400, "anilist")  # 24h cache
+        return genres
+
+    async def get_tag_collection(self) -> List[Dict[str, Any]]:
+        """Get all available media tags from AniList"""
+        cache_key = "anilist:tags"
+        cached = await cache_service.get_with_fallback(cache_key, "anilist")
+        if cached:
+            return cached
+
+        query = """
+        query {
+            MediaTagCollection {
+                name
+                description
+                category
+                isAdult
+            }
+        }
+        """
+        result = await self._graphql_request(query)
+        tags = result.get("MediaTagCollection", [])
+        # Filter out adult tags
+        tags = [t for t in tags if not t.get("isAdult")]
+        await cache_service.set_cached(cache_key, tags, 86400, "anilist")  # 24h cache
+        return tags
+
+    async def browse_manga(
+        self,
+        page: int = 1,
+        per_page: int = 20,
+        genres: Optional[List[str]] = None,
+        tags: Optional[List[str]] = None,
+        country: Optional[str] = None,
+        format_in: Optional[List[str]] = None,
+        status: Optional[str] = None,
+        year_greater: Optional[int] = None,
+        year_lesser: Optional[int] = None,
+        sort: str = "POPULARITY_DESC",
+    ) -> Dict[str, Any]:
+        """Browse manga with filters using AniList API"""
+        # Build cache key from all params
+        cache_parts = [
+            f"anilist:browse:{page}:{per_page}:{sort}",
+            f"g={','.join(genres or [])}",
+            f"t={','.join(tags or [])}",
+            f"c={country or ''}",
+            f"f={','.join(format_in or [])}",
+            f"s={status or ''}",
+            f"y={year_greater or ''}-{year_lesser or ''}",
+        ]
+        cache_key = ":".join(cache_parts)
+        cached = await cache_service.get_with_fallback(cache_key, "anilist")
+        if cached:
+            return cached
+
+        # Build dynamic query variables
+        var_defs = ["$page: Int", "$perPage: Int", "$sort: [MediaSort]"]
+        media_args = ["type: MANGA", "page: $page", "perPage: $perPage", "sort: $sort"]
+        variables: Dict[str, Any] = {"page": page, "perPage": per_page, "sort": [sort]}
+
+        if genres:
+            var_defs.append("$genre_in: [String]")
+            media_args.append("genre_in: $genre_in")
+            variables["genre_in"] = genres
+
+        if tags:
+            var_defs.append("$tag_in: [String]")
+            media_args.append("tag_in: $tag_in")
+            variables["tag_in"] = tags
+
+        if country:
+            var_defs.append("$countryOfOrigin: CountryCode")
+            media_args.append("countryOfOrigin: $countryOfOrigin")
+            variables["countryOfOrigin"] = country
+
+        if format_in:
+            var_defs.append("$format_in: [MediaFormat]")
+            media_args.append("format_in: $format_in")
+            variables["format_in"] = format_in
+
+        if status:
+            var_defs.append("$status: MediaStatus")
+            media_args.append("status: $status")
+            variables["status"] = status
+
+        if year_greater:
+            var_defs.append("$startDate_greater: FuzzyDateInt")
+            media_args.append("startDate_greater: $startDate_greater")
+            variables["startDate_greater"] = year_greater * 10000  # AniList uses YYYYMMDD format
+
+        if year_lesser:
+            var_defs.append("$startDate_lesser: FuzzyDateInt")
+            media_args.append("startDate_lesser: $startDate_lesser")
+            variables["startDate_lesser"] = year_lesser * 10000 + 9999
+
+        # Build page-level args string - separate page args from media args
+        page_args = f"page: $page, perPage: $perPage"
+        media_filter_args = ", ".join(
+            a for a in media_args if a not in ("page: $page", "perPage: $perPage")
+        )
+
+        graphql_query = f"""
+        query ({', '.join(var_defs)}) {{
+            Page({page_args}) {{
+                pageInfo {{ total currentPage lastPage hasNextPage perPage }}
+                media({media_filter_args}) {{
+                    id
+                    title {{ romaji english native }}
+                    coverImage {{ large medium }}
+                    description
+                    status
+                    chapters
+                    averageScore
+                    popularity
+                    countryOfOrigin
+                    format
+                    startDate {{ year }}
+                    genres
+                    tags {{ name rank }}
+                }}
+            }}
+        }}
+        """
+
+        result = await self._graphql_request(graphql_query, variables)
+        await cache_service.set_cached(cache_key, result, CacheTTL.SEARCH_RESULTS, "anilist")
+        return result
+
     async def search_manga(self, query: str, page: int = 1, per_page: int = 20) -> Dict[str, Any]:
         """
         Search for manga on AniList

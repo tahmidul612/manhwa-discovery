@@ -281,6 +281,76 @@ async def get_popular_manga(
         raise HTTPException(status_code=500, detail="Failed to fetch popular manga")
 
 
+@router.get("/genres")
+async def get_genres():
+    """Get all available AniList genres"""
+    try:
+        genres = await anilist_client.get_genre_collection()
+        return {"genres": genres}
+    except Exception as e:
+        logger.error(f"Failed to fetch genres: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch genres")
+
+
+@router.get("/tags")
+async def get_tags():
+    """Get all available AniList media tags"""
+    try:
+        tags = await anilist_client.get_tag_collection()
+        return {"tags": tags}
+    except Exception as e:
+        logger.error(f"Failed to fetch tags: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch tags")
+
+
+@router.get("/browse")
+async def browse_manga(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=50),
+    genres: Optional[str] = Query(None, description="Comma-separated genres"),
+    tags: Optional[str] = Query(None, description="Comma-separated tags"),
+    country: Optional[str] = Query(None, description="Country code (KR, JP, CN, TW)"),
+    format: Optional[str] = Query(None, description="Comma-separated formats (MANGA, MANHWA, MANHUA, ONE_SHOT)"),
+    status: Optional[str] = Query(None, description="Media status (RELEASING, FINISHED, NOT_YET_RELEASED, CANCELLED, HIATUS)"),
+    year_min: Optional[int] = Query(None),
+    year_max: Optional[int] = Query(None),
+    sort: str = Query("POPULARITY_DESC", description="Sort: POPULARITY_DESC, TRENDING_DESC, SCORE_DESC, START_DATE_DESC, FAVOURITES_DESC"),
+):
+    """Browse manga with filters using AniList"""
+    try:
+        genre_list = [g.strip() for g in genres.split(",")] if genres else None
+        tag_list = [t.strip() for t in tags.split(",")] if tags else None
+        format_list = [f.strip() for f in format.split(",")] if format else None
+
+        result = await anilist_client.browse_manga(
+            page=page,
+            per_page=per_page,
+            genres=genre_list,
+            tags=tag_list,
+            country=country,
+            format_in=format_list,
+            status=status,
+            year_greater=year_min,
+            year_lesser=year_max,
+            sort=sort,
+        )
+
+        media_list = result.get("Page", {}).get("media", [])
+        page_info = result.get("Page", {}).get("pageInfo", {})
+
+        parsed = [_parse_anilist_manga(m) for m in media_list]
+        return {
+            "results": parsed,
+            "total": page_info.get("total", 0),
+            "page": page,
+            "per_page": per_page,
+            "has_next": page_info.get("hasNextPage", False),
+        }
+    except Exception as e:
+        logger.error(f"Browse failed: {e}")
+        raise HTTPException(status_code=500, detail="Browse failed")
+
+
 @router.get("/search")
 async def search_manhwa(
     query: str = Query(..., min_length=1, description="Search query"),

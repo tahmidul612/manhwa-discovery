@@ -1,18 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, SearchX } from 'lucide-react';
+import { Loader2, SearchX, Search, LayoutGrid } from 'lucide-react';
 import { apiClient } from '../services/api';
 import { useAuthStore } from '../stores/useAuthStore';
 import SearchBar from '../components/SearchBar';
+import BrowsePanel from '../components/BrowsePanel';
 import ManhwaCard from '../components/ManhwaCard';
 import LinkManagementModal from '../components/LinkManagementModal';
 import { SkeletonGrid } from '../components/SkeletonCard';
 
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const [mode, setMode] = useState(searchParams.get('mode') || 'search');
   const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
-  const [filters, setFilters] = useState({});
+  const [searchFilters, setSearchFilters] = useState({});
+  const [browseFilters, setBrowseFilters] = useState({ sort: 'POPULARITY_DESC' });
   const [page, setPage] = useState(1);
   const [linkModal, setLinkModal] = useState({ open: false, manhwa: null });
   const { user, isAuthenticated } = useAuthStore();
@@ -27,6 +30,7 @@ export default function SearchPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['search'] });
+      queryClient.invalidateQueries({ queryKey: ['browse'] });
       queryClient.invalidateQueries({ queryKey: ['userLists'] });
     },
   });
@@ -36,25 +40,52 @@ export default function SearchPage() {
     const q = searchParams.get('q');
     if (q && q !== searchQuery) {
       setSearchQuery(q);
+      setMode('search');
     }
   }, [searchParams]);
 
-  const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['search', searchQuery, filters, page],
+  // Text search query
+  const { data: searchData, isLoading: searchLoading, isFetching: searchFetching } = useQuery({
+    queryKey: ['search', searchQuery, searchFilters, page],
     queryFn: () =>
       apiClient.searchManhwa(searchQuery, {
-        ...filters,
+        ...searchFilters,
         page,
         per_page: 20,
         user_id: user?.anilist_id,
       }),
-    enabled: searchQuery.length > 0,
+    enabled: mode === 'search' && searchQuery.length > 0,
     select: (res) => res.data,
     keepPreviousData: true,
   });
 
+  // Browse query
+  const browseQueryParams = {
+    page,
+    per_page: 20,
+    sort: browseFilters.sort || 'POPULARITY_DESC',
+    ...(browseFilters.genres?.length > 0 && { genres: browseFilters.genres.join(',') }),
+    ...(browseFilters.tags?.length > 0 && { tags: browseFilters.tags.join(',') }),
+    ...(browseFilters.country && { country: browseFilters.country }),
+    ...(browseFilters.format?.length > 0 && { format: browseFilters.format.join(',') }),
+    ...(browseFilters.status && { status: browseFilters.status }),
+    ...(browseFilters.yearMin && { year_min: browseFilters.yearMin }),
+    ...(browseFilters.yearMax && { year_max: browseFilters.yearMax }),
+  };
+
+  const { data: browseData, isLoading: browseLoading, isFetching: browseFetching } = useQuery({
+    queryKey: ['browse', browseQueryParams],
+    queryFn: () => apiClient.browseManhwa(browseQueryParams),
+    enabled: mode === 'browse',
+    select: (res) => res.data,
+    keepPreviousData: true,
+  });
+
+  const data = mode === 'search' ? searchData : browseData;
+  const isLoading = mode === 'search' ? searchLoading : browseLoading;
+  const isFetching = mode === 'search' ? searchFetching : browseFetching;
   const results = data?.results || [];
-  const totalPages = data?.total_pages || 1;
+  const totalPages = Math.ceil((data?.total || 0) / 20) || 1;
 
   const handleSearch = (query) => {
     setSearchQuery(query);
@@ -63,23 +94,71 @@ export default function SearchPage() {
   };
 
   const handleFilterChange = (newFilters) => {
-    setFilters(newFilters);
+    setSearchFilters(newFilters);
+    setPage(1);
+  };
+
+  const handleBrowseFilterChange = (newFilters) => {
+    setBrowseFilters(newFilters);
+    setPage(1);
+  };
+
+  const switchMode = (newMode) => {
+    setMode(newMode);
     setPage(1);
   };
 
   return (
     <div className="space-y-6">
-      <SearchBar
-        onSearch={handleSearch}
-        filters={filters}
-        onFilterChange={handleFilterChange}
-      />
+      {/* Mode tabs */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => switchMode('search')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+            mode === 'search'
+              ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/40'
+              : 'glass hover:bg-glass-highlight text-text-secondary'
+          }`}
+        >
+          <Search className="w-4 h-4" />
+          Text Search
+        </button>
+        <button
+          onClick={() => switchMode('browse')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+            mode === 'browse'
+              ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/40'
+              : 'glass hover:bg-glass-highlight text-text-secondary'
+          }`}
+        >
+          <LayoutGrid className="w-4 h-4" />
+          Browse
+        </button>
+      </div>
+
+      {/* Search mode */}
+      {mode === 'search' && (
+        <SearchBar
+          onSearch={handleSearch}
+          filters={searchFilters}
+          onFilterChange={handleFilterChange}
+        />
+      )}
+
+      {/* Browse mode */}
+      {mode === 'browse' && (
+        <BrowsePanel
+          filters={browseFilters}
+          onFilterChange={handleBrowseFilterChange}
+        />
+      )}
 
       {/* Results info */}
-      {searchQuery && data && (
+      {data && (
         <div className="flex items-center justify-between text-sm text-text-secondary">
           <p>
-            {data.total || 0} results for &ldquo;{searchQuery}&rdquo;
+            {data.total || 0} results
+            {mode === 'search' && searchQuery && <> for &ldquo;{searchQuery}&rdquo;</>}
             {isFetching && !isLoading && (
               <Loader2 className="inline w-3.5 h-3.5 ml-2 animate-spin" />
             )}
@@ -106,11 +185,13 @@ export default function SearchPage() {
             />
           ))}
         </div>
-      ) : searchQuery ? (
+      ) : (mode === 'search' && searchQuery) || mode === 'browse' ? (
         <div className="flex flex-col items-center justify-center py-20 text-text-secondary">
           <SearchX className="w-12 h-12 mb-4 opacity-40" />
           <p className="text-lg font-medium">No results found</p>
-          <p className="text-sm mt-1">Try adjusting your search or filters.</p>
+          <p className="text-sm mt-1">
+            {mode === 'search' ? 'Try adjusting your search or filters.' : 'Try different filters.'}
+          </p>
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center py-20 text-text-secondary">
