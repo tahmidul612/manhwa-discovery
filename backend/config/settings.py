@@ -11,11 +11,11 @@ class Settings(BaseSettings):
     MANGADEX_API_KEY: Optional[str] = None
     ANILIST_CLIENT_ID: Optional[str] = None
     ANILIST_CLIENT_SECRET: Optional[str] = None
-    ANILIST_REDIRECT_URI: str = "http://localhost:8000/auth/anilist/callback"
+    ANILIST_REDIRECT_URI: str = "http://localhost:8009/auth/anilist/callback"
 
     # Server Configuration
     HOST: str = "0.0.0.0"
-    PORT: int = 8000
+    PORT: int = 8009
     DEBUG: bool = False
 
     # Database Configuration

@@ -1,7 +1,7 @@
 // Auth service - delegates to useAuthStore for state management.
 // This module provides standalone helpers for non-component contexts.
 
-const API_URL = import.meta.env?.VITE_API_URL || 'http://localhost:8000';
+const API_URL = import.meta.env?.VITE_API_URL || 'http://localhost:8009';
 
 export function getLoginUrl() {
   return `${API_URL}/auth/anilist/login`;

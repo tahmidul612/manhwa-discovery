@@ -36,7 +36,7 @@ export default function ProfilePage() {
             link entries with MangaDex.
           </p>
           <a
-            href={`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/auth/anilist/login`}
+            href={`${import.meta.env.VITE_API_URL || 'http://localhost:8009'}/auth/anilist/login`}
             className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-accent-primary hover:bg-accent-secondary transition-colors text-white font-medium"
           >
             <LogIn className="w-4 h-4" />
