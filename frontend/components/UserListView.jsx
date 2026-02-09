@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, Link2 } from 'lucide-react';
 import { apiClient } from '../services/api';
 import ManhwaCard from './ManhwaCard';
+import LinkManagementModal from './LinkManagementModal';
 import { SkeletonGrid } from './SkeletonCard';
 
 const STATUS_TABS = [
@@ -16,6 +17,7 @@ const STATUS_TABS = [
 
 export default function UserListView({ userId, onStatsLoaded }) {
   const [activeTab, setActiveTab] = useState('all');
+  const [linkModal, setLinkModal] = useState({ open: false, manhwa: null, mode: 'link' });
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
@@ -159,12 +161,21 @@ export default function UserListView({ userId, onStatsLoaded }) {
                 manhwa={manhwa}
                 isLinked={entry.is_linked}
                 connectionId={entry.connection?._id}
+                onLink={(m) => setLinkModal({ open: true, manhwa: m, mode: 'link' })}
                 onUnlink={(connId) => unlinkMutation.mutate(connId)}
               />
             );
           })}
         </div>
       )}
+
+      {/* Link modal */}
+      <LinkManagementModal
+        isOpen={linkModal.open}
+        onClose={() => setLinkModal({ open: false, manhwa: null, mode: 'link' })}
+        manhwa={linkModal.manhwa}
+        mode={linkModal.mode}
+      />
     </div>
   );
 }
