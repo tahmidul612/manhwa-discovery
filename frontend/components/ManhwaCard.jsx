@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Star, BookOpen, Calendar, Link2, LinkIcon, Unlink, Wrench } from 'lucide-react';
+import { Star, BookOpen, Calendar, Link2, LinkIcon, Unlink, Wrench, Loader2 } from 'lucide-react';
 
 const STATUS_BADGES = {
   READING: 'badge-reading',
@@ -11,7 +11,7 @@ const STATUS_BADGES = {
   PLANNING: 'badge-planning',
 };
 
-export default function ManhwaCard({ manhwa, onHover, onLink, onUnlink, onFixLink, isLinked, connectionId }) {
+export default function ManhwaCard({ manhwa, onHover, onLink, onUnlink, onFixLink, isLinked, isAutoLinking, connectionId }) {
   const [imgLoaded, setImgLoaded] = useState(false);
   const navigate = useNavigate();
 
@@ -45,6 +45,16 @@ export default function ManhwaCard({ manhwa, onHover, onLink, onUnlink, onFixLin
         />
         {/* Gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+
+        {/* Auto-linking overlay */}
+        {isAutoLinking && (
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
+            <div className="flex flex-col items-center gap-2">
+              <Loader2 className="w-6 h-6 animate-spin text-accent-primary" />
+              <span className="text-xs text-white font-medium">Linking...</span>
+            </div>
+          </div>
+        )}
 
         {/* Source badge */}
         <div className="absolute top-2 left-2">

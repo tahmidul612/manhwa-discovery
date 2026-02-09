@@ -48,9 +48,15 @@ export const apiClient = {
   getUserLists: (userId, status = null) =>
     api.get(`/users/${userId}/lists`, { params: status ? { status } : {} }),
 
-  // Sync
+  // Sync & Auto-link
   syncUserList: (userId) =>
     api.post(`/users/${userId}/sync`),
+
+  autoLinkEntry: (userId, anilistId, anilistEntry) =>
+    api.post(`/users/${userId}/auto-link-entry`, {
+      anilist_id: String(anilistId),
+      anilist_entry: anilistEntry,
+    }),
 
   // Connections
   getUserConnections: (userId, skip = 0, limit = 20) =>

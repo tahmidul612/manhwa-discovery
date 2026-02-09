@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, Link2 } from 'lucide-react';
 import { apiClient } from '../services/api';
@@ -18,6 +18,9 @@ const STATUS_TABS = [
 export default function UserListView({ userId, onStatsLoaded }) {
   const [activeTab, setActiveTab] = useState('all');
   const [linkModal, setLinkModal] = useState({ open: false, manhwa: null, mode: 'link' });
+  const [autoLinking, setAutoLinking] = useState(false);
+  const [linkingEntryId, setLinkingEntryId] = useState(null); // anilist media id currently being linked
+  const [autoLinkResults, setAutoLinkResults] = useState(null); // { linked: n, failed: n, total: n }
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
@@ -65,6 +68,41 @@ export default function UserListView({ userId, onStatsLoaded }) {
   }
   const totalCount = Object.values(lists).reduce((sum, entries) => sum + entries.length, 0);
 
+  // Auto-link all unlinked entries one by one
+  const handleAutoLinkAll = useCallback(async () => {
+    // Get ALL entries (not just currently displayed tab)
+    const allEntries = Object.values(lists).flat();
+    const unlinked = allEntries.filter((e) => !e.is_linked);
+    if (unlinked.length === 0) return;
+
+    setAutoLinking(true);
+    setAutoLinkResults(null);
+    let linked = 0;
+    let failed = 0;
+
+    for (const entry of unlinked) {
+      const media = entry.media || {};
+      const mediaId = String(media.id);
+      setLinkingEntryId(mediaId);
+
+      try {
+        const res = await apiClient.autoLinkEntry(userId, mediaId, entry);
+        if (res.data?.status === 'linked') {
+          linked++;
+        } else {
+          failed++;
+        }
+      } catch {
+        failed++;
+      }
+    }
+
+    setLinkingEntryId(null);
+    setAutoLinking(false);
+    setAutoLinkResults({ linked, failed, total: unlinked.length });
+    queryClient.invalidateQueries({ queryKey: ['userLists'] });
+  }, [lists, userId, queryClient]);
+
   if (error) {
     return (
       <div className="text-center py-12">
@@ -89,22 +127,40 @@ export default function UserListView({ userId, onStatsLoaded }) {
             {data?.total_entries || 0} entries, {data?.total_linked || 0} linked to MangaDex
           </p>
         </div>
-        <button
-          onClick={() => syncMutation.mutate()}
-          disabled={syncMutation.isPending}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-accent-primary/20 border border-accent-primary hover:bg-accent-primary/30 transition-colors text-sm disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
-          {syncMutation.isPending ? 'Syncing...' : 'Sync with AniList'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => syncMutation.mutate()}
+            disabled={syncMutation.isPending || autoLinking}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-accent-primary/20 border border-accent-primary hover:bg-accent-primary/30 transition-colors text-sm disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+            {syncMutation.isPending ? 'Syncing...' : 'Sync'}
+          </button>
+          <button
+            onClick={handleAutoLinkAll}
+            disabled={autoLinking || syncMutation.isPending}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-green-500/20 border border-green-500 hover:bg-green-500/30 transition-colors text-sm disabled:opacity-50"
+          >
+            <Link2 className={`w-4 h-4 ${autoLinking ? 'animate-pulse' : ''}`} />
+            {autoLinking ? 'Linking...' : 'Auto-Link All'}
+          </button>
+        </div>
       </div>
 
       {/* Sync result message */}
       {syncMutation.isSuccess && (
         <div className="rounded-xl glass p-3 text-sm text-green-400 border border-green-400/20">
+          <RefreshCw className="w-4 h-4 inline mr-2" />
+          AniList data refreshed ({syncMutation.data?.data?.total_entries || 0} entries)
+        </div>
+      )}
+
+      {/* Auto-link result message */}
+      {autoLinkResults && (
+        <div className="rounded-xl glass p-3 text-sm text-green-400 border border-green-400/20">
           <Link2 className="w-4 h-4 inline mr-2" />
-          Sync complete: {syncMutation.data?.data?.newly_matched || 0} new matches found,{' '}
-          {syncMutation.data?.data?.unmatched || 0} unmatched
+          Auto-link complete: {autoLinkResults.linked} linked, {autoLinkResults.failed} unmatched
+          (out of {autoLinkResults.total})
         </div>
       )}
 
@@ -155,11 +211,14 @@ export default function UserListView({ userId, onStatsLoaded }) {
               user_score: entry.score,
             };
 
+            const isCurrentlyLinking = linkingEntryId === String(media.id);
+
             return (
               <ManhwaCard
                 key={entry.id}
                 manhwa={manhwa}
                 isLinked={entry.is_linked}
+                isAutoLinking={isCurrentlyLinking}
                 connectionId={entry.connection?._id}
                 onLink={(m) => setLinkModal({ open: true, manhwa: m, mode: 'link' })}
                 onFixLink={(m) => setLinkModal({ open: true, manhwa: m, mode: 'relink' })}

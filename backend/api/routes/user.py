@@ -3,6 +3,7 @@ import logging
 from typing import Optional
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends, Query
+from pydantic import BaseModel
 from bson import ObjectId
 from backend.api.middleware.auth import get_current_user
 from backend.database.connection import get_db
@@ -140,11 +141,10 @@ async def sync_user_list(
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Force sync with AniList, run auto-matching algorithm,
-    and store/update connections in database.
+    Force refresh AniList data only (clear cache, re-fetch lists).
+    Does NOT run auto-matching.
     """
     _verify_user_access(current_user, user_id)
-    mongo_id = current_user["_id"]
 
     try:
         anilist_id = current_user.get("anilist_id")
@@ -162,95 +162,11 @@ async def sync_user_list(
             token=anilist_token
         )
 
-        # Flatten all entries
-        all_entries = []
-        for entries in lists.values():
-            all_entries.extend(entries)
-
-        if not all_entries:
-            return {"message": "No entries found in AniList", "matched": 0, "total": 0}
-
-        # Get existing connections to avoid re-matching
-        db = get_db()
-        existing = await db.manhwa_connections.find(
-            {"user_id": ObjectId(mongo_id)}
-        ).to_list(length=None)
-        existing_anilist_ids = {str(c["anilist_id"]) for c in existing}
-
-        # Filter to unmatched entries only
-        unmatched = [
-            e for e in all_entries
-            if str(e.get("media", {}).get("id", "")) not in existing_anilist_ids
-        ]
-
-        logger.info(f"Syncing: {len(all_entries)} total, {len(existing)} existing, {len(unmatched)} to match")
-
-        # Run auto-matching on unmatched entries
-        matched = await comparison_service.auto_match_user_list(
-            user_id=mongo_id,
-            anilist_list=unmatched
-        )
-
-        # Store new connections
-        new_connections = 0
-        for match in matched:
-            try:
-                md_data = match["mangadex_data"]
-                al_entry = match["anilist_entry"]
-                media = al_entry.get("media", {})
-                attrs = md_data.get("attributes", {})
-
-                connection_doc = {
-                    "user_id": ObjectId(mongo_id),
-                    "anilist_id": str(media.get("id", "")),
-                    "mangadex_id": md_data.get("id", ""),
-                    "anilist_data": {
-                        "id": str(media.get("id", "")),
-                        "title": media.get("title", {}),
-                        "alternative_titles": media.get("synonyms", []),
-                        "status": al_entry.get("status"),
-                        "progress": al_entry.get("progress", 0),
-                        "score": al_entry.get("score"),
-                        "cover_image": media.get("coverImage", {}).get("large"),
-                        "chapters": media.get("chapters"),
-                        "average_score": media.get("averageScore"),
-                        "start_date": media.get("startDate"),
-                        "updated_at": datetime.utcnow()
-                    },
-                    "mangadex_data": {
-                        "id": md_data.get("id", ""),
-                        "title": attrs.get("title", {}).get("en", ""),
-                        "alternative_titles": _extract_alt_titles(md_data),
-                        "description": (attrs.get("description", {}) or {}).get("en", ""),
-                        "cover_url": _extract_cover_url(md_data),
-                        "year": attrs.get("year"),
-                        "status": attrs.get("status"),
-                        "tags": [t.get("attributes", {}).get("name", {}).get("en", "")
-                                 for t in attrs.get("tags", [])],
-                        "last_updated": attrs.get("updatedAt"),
-                    },
-                    "match_confidence": match["confidence"],
-                    "manually_linked": False,
-                    "created_at": datetime.utcnow(),
-                    "updated_at": datetime.utcnow()
-                }
-
-                await db.manhwa_connections.update_one(
-                    {"user_id": ObjectId(mongo_id), "anilist_id": str(media.get("id", ""))},
-                    {"$set": connection_doc},
-                    upsert=True
-                )
-                new_connections += 1
-
-            except Exception as e:
-                logger.error(f"Failed to store connection: {e}")
+        total_entries = sum(len(v) for v in lists.values())
 
         return {
-            "message": "Sync completed",
-            "total_entries": len(all_entries),
-            "already_linked": len(existing),
-            "newly_matched": new_connections,
-            "unmatched": len(unmatched) - new_connections
+            "message": "Sync completed — AniList data refreshed",
+            "total_entries": total_entries,
         }
 
     except HTTPException:
@@ -258,6 +174,102 @@ async def sync_user_list(
     except Exception as e:
         logger.error(f"Sync failed: {e}")
         raise HTTPException(status_code=500, detail="Sync failed")
+
+
+class AutoLinkEntryRequest(BaseModel):
+    anilist_id: str
+    anilist_entry: dict
+
+
+@router.post("/{user_id}/auto-link-entry")
+async def auto_link_entry(
+    user_id: str,
+    request: AutoLinkEntryRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Auto-match a single AniList entry to MangaDex (0.70 confidence).
+    Returns the match result so the frontend can show per-entry progress.
+    """
+    _verify_user_access(current_user, user_id)
+    mongo_id = current_user["_id"]
+
+    try:
+        # Check if already linked
+        db = get_db()
+        existing = await db.manhwa_connections.find_one({
+            "user_id": ObjectId(mongo_id),
+            "anilist_id": request.anilist_id
+        })
+        if existing:
+            return {"status": "already_linked", "anilist_id": request.anilist_id}
+
+        # Run matching on the single entry
+        match_result = await comparison_service.find_best_match(request.anilist_entry)
+
+        if not match_result or match_result[1] < 0.70:
+            confidence = match_result[1] if match_result else 0
+            return {"status": "no_match", "anilist_id": request.anilist_id, "confidence": confidence}
+
+        md_data, confidence = match_result
+        al_entry = request.anilist_entry
+        media = al_entry.get("media", {})
+        attrs = md_data.get("attributes", {})
+
+        connection_doc = {
+            "user_id": ObjectId(mongo_id),
+            "anilist_id": request.anilist_id,
+            "mangadex_id": md_data.get("id", ""),
+            "anilist_data": {
+                "id": request.anilist_id,
+                "title": media.get("title", {}),
+                "alternative_titles": media.get("synonyms", []),
+                "status": al_entry.get("status"),
+                "progress": al_entry.get("progress", 0),
+                "score": al_entry.get("score"),
+                "cover_image": media.get("coverImage", {}).get("large"),
+                "chapters": media.get("chapters"),
+                "average_score": media.get("averageScore"),
+                "start_date": media.get("startDate"),
+                "updated_at": datetime.utcnow()
+            },
+            "mangadex_data": {
+                "id": md_data.get("id", ""),
+                "title": attrs.get("title", {}).get("en", ""),
+                "alternative_titles": _extract_alt_titles(md_data),
+                "description": (attrs.get("description", {}) or {}).get("en", ""),
+                "cover_url": _extract_cover_url(md_data),
+                "year": attrs.get("year"),
+                "status": attrs.get("status"),
+                "tags": [t.get("attributes", {}).get("name", {}).get("en", "")
+                         for t in attrs.get("tags", [])],
+                "last_updated": attrs.get("updatedAt"),
+            },
+            "match_confidence": confidence,
+            "manually_linked": False,
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+
+        await db.manhwa_connections.update_one(
+            {"user_id": ObjectId(mongo_id), "anilist_id": request.anilist_id},
+            {"$set": connection_doc},
+            upsert=True
+        )
+
+        return {
+            "status": "linked",
+            "anilist_id": request.anilist_id,
+            "mangadex_id": md_data.get("id", ""),
+            "confidence": confidence,
+            "mangadex_title": attrs.get("title", {}).get("en", ""),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Auto-link entry failed for {request.anilist_id}: {e}")
+        return {"status": "error", "anilist_id": request.anilist_id, "error": str(e)}
 
 
 @router.get("/{user_id}/connections")
