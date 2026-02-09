@@ -229,6 +229,7 @@ class CacheTTL:
     MANGA_DETAILS = 3600  # 1 hour
     SEARCH_RESULTS = 900  # 15 minutes
     RATE_LIMIT = 60  # 1 minute
+    CHAPTER_COUNT = 7200  # 2 hours
     USER_LISTS_MONGO = 1800  # 30 minutes (MongoDB fallback)
     MANGA_DETAILS_MONGO = 86400  # 24 hours (MongoDB fallback)
     SEARCH_RESULTS_MONGO = 3600  # 1 hour (MongoDB fallback)

@@ -301,6 +301,60 @@ class MangaDexClient:
             logger.error(f"Failed to fetch statistics: {e}")
             return {}
 
+    async def get_manga_chapter_count(self, manga_id: str) -> Optional[int]:
+        """
+        Get the highest chapter number for a manga via the aggregate endpoint.
+
+        Calls /manga/{id}/aggregate and finds the max chapter number
+        across all volumes. Cached with a 2-hour TTL.
+
+        Returns:
+            Highest chapter number as int, or None if unavailable
+        """
+        cache_key = f"mangadex:chapter_count:{manga_id}"
+        cached = await cache_service.get_with_fallback(cache_key, "mangadex")
+        if cached is not None:
+            return cached.get("count")
+
+        try:
+            params = {"includeUnavailable": 1}
+            result = await self._request_with_retry(
+                "GET", f"/manga/{manga_id}/aggregate", params=params
+            )
+
+            max_chapter = 0
+            for volume in result.get("volumes", {}).values():
+                for ch_num in volume.get("chapters", {}).keys():
+                    try:
+                        num = float(ch_num)
+                        if num > max_chapter:
+                            max_chapter = num
+                    except (ValueError, TypeError):
+                        continue
+
+            count = int(max_chapter) if max_chapter > 0 else None
+            await cache_service.set_cached(
+                cache_key, {"count": count}, CacheTTL.CHAPTER_COUNT, "mangadex"
+            )
+            return count
+        except Exception as e:
+            logger.warning(f"Failed to fetch chapter count for {manga_id}: {e}")
+            return None
+
+    async def get_manga_chapter_counts(self, manga_ids: List[str]) -> Dict[str, Optional[int]]:
+        """
+        Get chapter counts for multiple manga in parallel.
+
+        Returns:
+            Dictionary mapping manga_id to highest chapter number
+        """
+        tasks = {mid: self.get_manga_chapter_count(mid) for mid in manga_ids}
+        results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+        counts = {}
+        for mid, result in zip(tasks.keys(), results):
+            counts[mid] = result if isinstance(result, (int, type(None))) else None
+        return counts
+
     async def get_latest_chapters(self, manga_ids: List[str]) -> Dict[str, str]:
         """
         Get latest chapter number for multiple manga

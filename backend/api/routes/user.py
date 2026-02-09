@@ -9,6 +9,7 @@ from backend.api.middleware.auth import get_current_user
 from backend.database.connection import get_db
 from backend.database.cache import cache_service
 from backend.services.anilist.client import anilist_client
+from backend.services.mangadex.client import mangadex_client
 from backend.services.comparison import comparison_service
 
 logger = logging.getLogger(__name__)
@@ -114,6 +115,21 @@ async def get_user_lists(
                 enriched_entries.append(enriched_entry)
 
             enriched_lists[list_status] = enriched_entries
+
+        # Fetch MangaDex chapter counts for all linked entries
+        mangadex_ids = [
+            e["mangadex_data"]["id"]
+            for entries in enriched_lists.values()
+            for e in entries
+            if e["is_linked"] and e.get("mangadex_data", {}).get("id")
+        ]
+        if mangadex_ids:
+            chapter_counts = await mangadex_client.get_manga_chapter_counts(mangadex_ids)
+            for entries in enriched_lists.values():
+                for e in entries:
+                    md = e.get("mangadex_data")
+                    if md and md.get("id") in chapter_counts:
+                        md["chapters_count"] = chapter_counts[md["id"]]
 
         total_entries = sum(len(v) for v in enriched_lists.values())
         total_linked = sum(
@@ -239,6 +255,7 @@ async def auto_link_entry(
                 "alternative_titles": _extract_alt_titles(md_data),
                 "description": (attrs.get("description", {}) or {}).get("en", ""),
                 "cover_url": _extract_cover_url(md_data),
+                "chapters_count": await mangadex_client.get_manga_chapter_count(md_data.get("id", "")),
                 "year": attrs.get("year"),
                 "status": attrs.get("status"),
                 "tags": [t.get("attributes", {}).get("name", {}).get("en", "")
