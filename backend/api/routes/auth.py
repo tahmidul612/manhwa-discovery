@@ -1,13 +1,17 @@
 # Authentication routes - AniList OAuth flow
+import json
 import logging
 import secrets
 from datetime import datetime, timedelta
+from urllib.parse import urlencode
 from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import RedirectResponse
 from backend.config.settings import settings
 from backend.services.anilist.client import anilist_client
 from backend.api.middleware.auth import create_jwt_token, get_current_user
 from backend.database.connection import get_db
+
+FRONTEND_URL = "http://localhost:3009"
 
 logger = logging.getLogger(__name__)
 
@@ -18,12 +22,11 @@ router = APIRouter()
 async def anilist_login():
     """
     Redirect to AniList OAuth authorization page.
-    Returns the authorization URL for the frontend to redirect to.
     """
     state = secrets.token_urlsafe(32)
     auth_url = anilist_client.get_authorization_url(state=state)
 
-    return {"auth_url": auth_url, "state": state}
+    return RedirectResponse(url=auth_url)
 
 
 @router.get("/anilist/callback")
@@ -93,21 +96,27 @@ async def anilist_callback(
         # Create JWT token
         jwt_token = create_jwt_token(user_id, anilist_id)
 
-        return {
-            "token": jwt_token,
-            "user": {
-                "id": user_id,
-                "anilist_id": anilist_id,
-                "username": username,
-                "avatar": anilist_user.get("avatar", {}).get("large")
-            }
+        user_data = {
+            "id": user_id,
+            "anilist_id": anilist_id,
+            "username": username,
+            "avatar": anilist_user.get("avatar", {}).get("large")
         }
+
+        # Redirect back to frontend with token and user data
+        params = urlencode({
+            "token": jwt_token,
+            "user": json.dumps(user_data)
+        })
+        return RedirectResponse(url=f"{FRONTEND_URL}/auth/callback?{params}")
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"OAuth callback failed: {e}")
-        raise HTTPException(status_code=500, detail="Authentication failed")
+        # Redirect to frontend with error
+        params = urlencode({"error": "Authentication failed"})
+        return RedirectResponse(url=f"{FRONTEND_URL}/auth/callback?{params}")
 
 
 @router.post("/logout")
