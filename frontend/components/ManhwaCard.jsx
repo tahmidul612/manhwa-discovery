@@ -17,8 +17,11 @@ export default function ManhwaCard({ manhwa, onHover, onLink, onUnlink, onFixLin
 
   const rating = manhwa.rating ? manhwa.rating.toFixed(1) : null;
   const chapters = manhwa.chapters_count || manhwa.chapters;
+  const userProgress = manhwa.user_progress;
   const year = manhwa.year;
   const userStatus = manhwa.user_status;
+
+  const hasProgress = userProgress != null && userProgress > 0;
 
   return (
     <motion.div
@@ -123,21 +126,38 @@ export default function ManhwaCard({ manhwa, onHover, onLink, onUnlink, onFixLin
       </div>
 
       {/* Content — title + metadata */}
-      <div className="p-3 space-y-1">
+      <div className="p-3 space-y-1.5">
         <h3 className="font-semibold text-sm leading-tight line-clamp-2 text-text-primary">
           {manhwa.title}
         </h3>
 
-        <div className="flex items-center gap-2 text-[11px] text-text-tertiary">
-          {year && <span>{year}</span>}
-          {year && chapters && <span>·</span>}
-          {chapters && (
-            <span className="flex items-center gap-0.5">
-              <BookOpen className="w-3 h-3" />
-              {chapters} ch
-            </span>
+        <div className="flex items-center justify-between gap-2">
+          {year && <span className="text-xs text-text-tertiary">{year}</span>}
+
+          {(hasProgress || chapters) && (
+            <div className="flex items-center gap-1.5 text-sm font-medium">
+              <BookOpen className="w-3.5 h-3.5 text-accent-primary" />
+              {hasProgress && chapters ? (
+                <>
+                  <span className="text-text-primary">{userProgress}</span>
+                  <span className="text-text-tertiary text-xs">/</span>
+                  <span className="text-text-secondary">{chapters}</span>
+                </>
+              ) : (
+                <span className="text-text-secondary">{chapters}</span>
+              )}
+            </div>
           )}
         </div>
+
+        {hasProgress && chapters > 0 && (
+          <div className="w-full h-1.5 rounded-full bg-surface-elevated overflow-hidden">
+            <div
+              className="h-full rounded-full bg-accent-primary"
+              style={{ width: `${Math.min(100, (userProgress / chapters) * 100)}%` }}
+            />
+          </div>
+        )}
       </div>
     </motion.div>
   );
