@@ -1,0 +1,12 @@
+{
+  "name": "manhwa-discovery-frontend",
+  "version": "0.1.0",
+  "description": "Frontend for Manhwa Discovery",
+  "scripts": {
+    "dev": "TODO: Add dev server command",
+    "build": "TODO: Add build command",
+    "start": "TODO: Add start command"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

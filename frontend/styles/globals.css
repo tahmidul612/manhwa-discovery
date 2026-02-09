@@ -1,0 +1,16 @@
+/* Global styles */
+/* TODO: Add global CSS variables and reset */
+
+:root {
+  /* Color palette */
+  --primary-color: #000;
+  --secondary-color: #000;
+  --background-color: #fff;
+  --text-color: #000;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}

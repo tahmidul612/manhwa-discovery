@@ -1,0 +1,25 @@
+# Python dependencies
+# TODO: Add required packages
+
+# Web framework (choose one)
+# fastapi
+# flask
+
+# HTTP client
+# httpx
+# requests
+
+# Database
+# sqlalchemy
+# psycopg2-binary
+
+# Cache
+# redis
+
+# Utilities
+# python-dotenv
+# pydantic
+
+# Testing
+# pytest
+# pytest-asyncio
