@@ -162,6 +162,7 @@ export default function UserListView({ userId, onStatsLoaded }) {
                 isLinked={entry.is_linked}
                 connectionId={entry.connection?._id}
                 onLink={(m) => setLinkModal({ open: true, manhwa: m, mode: 'link' })}
+                onFixLink={(m) => setLinkModal({ open: true, manhwa: m, mode: 'relink' })}
                 onUnlink={(connId) => unlinkMutation.mutate(connId)}
               />
             );

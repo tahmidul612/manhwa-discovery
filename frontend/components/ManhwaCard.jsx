@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Star, BookOpen, Calendar, Link2, LinkIcon, Unlink } from 'lucide-react';
+import { Star, BookOpen, Calendar, Link2, LinkIcon, Unlink, Wrench } from 'lucide-react';
 
 const STATUS_BADGES = {
   READING: 'badge-reading',
@@ -11,7 +11,7 @@ const STATUS_BADGES = {
   PLANNING: 'badge-planning',
 };
 
-export default function ManhwaCard({ manhwa, onHover, onLink, onUnlink, isLinked, connectionId }) {
+export default function ManhwaCard({ manhwa, onHover, onLink, onUnlink, onFixLink, isLinked, connectionId }) {
   const [imgLoaded, setImgLoaded] = useState(false);
   const navigate = useNavigate();
 
@@ -62,17 +62,29 @@ export default function ManhwaCard({ manhwa, onHover, onLink, onUnlink, isLinked
           </div>
         )}
 
-        {/* Link status */}
-        <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Link actions */}
+        <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           {isLinked ? (
-            <button
-              onClick={(e) => { e.stopPropagation(); onUnlink?.(connectionId); }}
-              className="p-1.5 rounded-lg glass hover:bg-red-500/20 transition-colors"
-              aria-label="Unlink manga"
-              title="Unlink"
-            >
-              <Unlink className="w-3.5 h-3.5 text-red-400" />
-            </button>
+            <>
+              {onFixLink && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onFixLink(manhwa); }}
+                  className="p-1.5 rounded-lg glass hover:bg-yellow-500/20 transition-colors"
+                  aria-label="Fix link"
+                  title="Fix Link"
+                >
+                  <Wrench className="w-3.5 h-3.5 text-yellow-400" />
+                </button>
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); onUnlink?.(connectionId); }}
+                className="p-1.5 rounded-lg glass hover:bg-red-500/20 transition-colors"
+                aria-label="Unlink manga"
+                title="Unlink"
+              >
+                <Unlink className="w-3.5 h-3.5 text-red-400" />
+              </button>
+            </>
           ) : (
             <button
               onClick={(e) => { e.stopPropagation(); onLink?.(manhwa); }}
