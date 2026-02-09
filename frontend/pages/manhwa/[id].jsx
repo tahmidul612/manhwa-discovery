@@ -5,8 +5,14 @@ import { motion } from 'framer-motion';
 import {
   Star, BookOpen, Calendar, Clock, Tag,
   ExternalLink, ChevronDown, Loader2,
-  Link2, LinkIcon, Unlink, Wrench,
+  Link2, LinkIcon, Unlink, Wrench, Plus,
 } from 'lucide-react';
+
+const ADD_STATUS_OPTIONS = [
+  { key: 'PLANNING', label: 'Plan to Read' },
+  { key: 'READING', label: 'Reading' },
+  { key: 'COMPLETED', label: 'Completed' },
+];
 import { apiClient } from '../../services/api';
 import { useAuthStore } from '../../stores/useAuthStore';
 import ComparisonView from '../../components/ComparisonView';
@@ -41,6 +47,21 @@ export default function ManhwaDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['userLists'] });
     },
   });
+
+  const addToListMutation = useMutation({
+    mutationFn: (status) => {
+      if (source === 'anilist') {
+        return apiClient.addToAniListById(id, status);
+      }
+      return apiClient.addToAniList({ mangadex_id: id, status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['manhwa', id, source] });
+      queryClient.invalidateQueries({ queryKey: ['userLists'] });
+    },
+  });
+
+  const [showAddMenu, setShowAddMenu] = useState(false);
 
   if (isLoading) {
     return (
@@ -219,6 +240,43 @@ export default function ManhwaDetailPage() {
                     </button>
                   )}
                 </>
+              )}
+
+              {/* Add to AniList */}
+              {isAuthenticated && !manhwa.user_list_status && !manhwa.user_status && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowAddMenu(!showAddMenu)}
+                    disabled={addToListMutation.isPending}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg glass hover:bg-green-500/20 text-sm text-green-400 transition-colors disabled:opacity-50"
+                  >
+                    {addToListMutation.isPending ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Plus className="w-3.5 h-3.5" />
+                    )}
+                    Add to AniList
+                  </button>
+                  {showAddMenu && (
+                    <div className="absolute top-full left-0 mt-1 py-1 rounded-lg glass min-w-[140px] z-20">
+                      {ADD_STATUS_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.key}
+                          onClick={() => {
+                            setShowAddMenu(false);
+                            addToListMutation.mutate(opt.key);
+                          }}
+                          className="w-full px-3 py-1.5 text-left text-xs hover:bg-glass-highlight transition-colors"
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {addToListMutation.isSuccess && (
+                <span className="text-xs text-green-400">Added!</span>
               )}
             </div>
           </div>

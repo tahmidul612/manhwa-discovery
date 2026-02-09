@@ -71,6 +71,9 @@ export const apiClient = {
   // Add to AniList
   addToAniList: (data) =>
     api.post('/manhwa/anilist/add', data),
+
+  addToAniListById: (anilistId, status = 'PLANNING') =>
+    api.post('/manhwa/anilist/add-by-id', { anilist_id: anilistId, status }),
 };
 
 export default apiClient;

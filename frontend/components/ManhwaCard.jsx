@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Star, BookOpen, Link2, LinkIcon, Unlink, Wrench, Loader2 } from 'lucide-react';
+import { Star, BookOpen, Link2, LinkIcon, Unlink, Wrench, Loader2, Plus } from 'lucide-react';
 
 const STATUS_BADGES = {
   READING: 'badge-reading',
@@ -11,8 +11,15 @@ const STATUS_BADGES = {
   PLANNING: 'badge-planning',
 };
 
-export default function ManhwaCard({ manhwa, onHover, onLink, onUnlink, onFixLink, isLinked, isAutoLinking, connectionId }) {
+const ADD_LIST_OPTIONS = [
+  { key: 'PLANNING', label: 'Plan to Read' },
+  { key: 'READING', label: 'Reading' },
+  { key: 'COMPLETED', label: 'Completed' },
+];
+
+export default function ManhwaCard({ manhwa, onHover, onLink, onUnlink, onFixLink, onAddToList, isLinked, isAutoLinking, connectionId }) {
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [showAddMenu, setShowAddMenu] = useState(false);
   const navigate = useNavigate();
 
   const rating = manhwa.rating ? manhwa.rating.toFixed(1) : null;
@@ -88,7 +95,7 @@ export default function ManhwaCard({ manhwa, onHover, onLink, onUnlink, onFixLin
             )}
           </div>
 
-          {/* Link actions */}
+          {/* Card actions */}
           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             {isLinked ? (
               <>
@@ -111,15 +118,46 @@ export default function ManhwaCard({ manhwa, onHover, onLink, onUnlink, onFixLin
                   <Unlink className="w-3.5 h-3.5 text-red-400" />
                 </button>
               </>
-            ) : (
+            ) : onLink ? (
               <button
-                onClick={(e) => { e.stopPropagation(); onLink?.(manhwa); }}
+                onClick={(e) => { e.stopPropagation(); onLink(manhwa); }}
                 className="p-1.5 rounded-lg glass hover:bg-accent-primary/20 transition-colors"
                 aria-label="Link manga"
                 title="Link to MangaDex"
               >
                 <LinkIcon className="w-3.5 h-3.5 text-accent-primary" />
               </button>
+            ) : null}
+
+            {/* Add to AniList */}
+            {onAddToList && !userStatus && !manhwa.user_list_status && (
+              <div className="relative">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowAddMenu(!showAddMenu); }}
+                  className="p-1.5 rounded-lg glass hover:bg-green-500/20 transition-colors"
+                  aria-label="Add to AniList"
+                  title="Add to AniList"
+                >
+                  <Plus className="w-3.5 h-3.5 text-green-400" />
+                </button>
+                {showAddMenu && (
+                  <div className="absolute bottom-full right-0 mb-1 py-1 rounded-lg glass min-w-[120px] z-20">
+                    {ADD_LIST_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.key}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowAddMenu(false);
+                          onAddToList(manhwa, opt.key);
+                        }}
+                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-glass-highlight transition-colors"
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>

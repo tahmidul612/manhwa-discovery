@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, SearchX } from 'lucide-react';
 import { apiClient } from '../services/api';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -15,7 +15,21 @@ export default function SearchPage() {
   const [filters, setFilters] = useState({});
   const [page, setPage] = useState(1);
   const [linkModal, setLinkModal] = useState({ open: false, manhwa: null });
-  const { user } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
+  const queryClient = useQueryClient();
+
+  const addToListMutation = useMutation({
+    mutationFn: ({ manhwa, status }) => {
+      if (manhwa.source === 'anilist') {
+        return apiClient.addToAniListById(manhwa.id, status);
+      }
+      return apiClient.addToAniList({ mangadex_id: manhwa.id, status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['search'] });
+      queryClient.invalidateQueries({ queryKey: ['userLists'] });
+    },
+  });
 
   // Sync URL query param with state
   useEffect(() => {
@@ -88,6 +102,7 @@ export default function SearchPage() {
               isLinked={manhwa.is_linked}
               connectionId={manhwa.connection_id}
               onLink={(m) => setLinkModal({ open: true, manhwa: m })}
+              onAddToList={isAuthenticated ? (m, status) => addToListMutation.mutate({ manhwa: m, status }) : undefined}
             />
           ))}
         </div>

@@ -29,6 +29,11 @@ class AddToAniListRequest(BaseModel):
     mangadex_link: Optional[str] = None
 
 
+class AddToAniListByIdRequest(BaseModel):
+    anilist_id: int
+    status: str = "PLANNING"
+
+
 # --- Helpers ---
 
 def _parse_mangadex_manga(data: dict) -> dict:
@@ -110,7 +115,7 @@ async def _enrich_with_connection(
     parsed: dict, current_user: dict,
     anilist_id: str = None, mangadex_id: str = None
 ) -> dict:
-    """Add connection data to a detail response if the user has a link for this manga."""
+    """Add connection and user list status to a detail response."""
     try:
         db = get_db()
         query = {"user_id": ObjectId(current_user["_id"])}
@@ -130,6 +135,25 @@ async def _enrich_with_connection(
         else:
             parsed["connection"] = None
             parsed["is_linked"] = False
+
+        # Check if manga is in user's AniList list (uses cached data)
+        parsed["user_list_status"] = None
+        al_id = current_user.get("anilist_id")
+        check_media_id = anilist_id  # the AniList media ID to look for
+        if al_id and check_media_id:
+            try:
+                lists = await anilist_client.get_user_manga_list(
+                    user_id=int(al_id),
+                    token=current_user.get("anilist_token")
+                )
+                for entries in lists.values():
+                    for entry in entries:
+                        if str(entry.get("media", {}).get("id")) == str(check_media_id):
+                            parsed["user_list_status"] = entry.get("status")
+                            parsed["user_list_progress"] = entry.get("progress")
+                            break
+            except Exception:
+                pass
     except Exception as e:
         logger.warning(f"Failed to enrich with connection: {e}")
         parsed["connection"] = None
@@ -304,6 +328,27 @@ async def search_manhwa(
                 md_conn_map = {c["mangadex_id"]: c for c in connections}
                 al_conn_map = {c["anilist_id"]: c for c in connections}
 
+                # Build AniList media ID lookup from user's list
+                al_list_map = {}  # media_id -> {status, progress}
+                if current_user:
+                    al_id = current_user.get("anilist_id")
+                    if al_id:
+                        try:
+                            lists = await anilist_client.get_user_manga_list(
+                                user_id=int(al_id),
+                                token=current_user.get("anilist_token")
+                            )
+                            for entries in lists.values():
+                                for entry in entries:
+                                    media_id = str(entry.get("media", {}).get("id", ""))
+                                    if media_id:
+                                        al_list_map[media_id] = {
+                                            "status": entry.get("status"),
+                                            "progress": entry.get("progress"),
+                                        }
+                        except Exception:
+                            pass
+
                 for item in merged:
                     conn = None
                     if item["source"] == "mangadex":
@@ -312,10 +357,24 @@ async def search_manhwa(
                         conn = al_conn_map.get(item["id"])
 
                     if conn:
+                        item["is_linked"] = True
+                        item["connection_id"] = str(conn.get("_id", ""))
                         al_data = conn.get("anilist_data", {})
                         item["user_status"] = al_data.get("status")
                         item["user_progress"] = al_data.get("progress")
                         item["user_score"] = al_data.get("score")
+                    else:
+                        item["is_linked"] = False
+                        item["connection_id"] = None
+
+                    # Check if in user's AniList list (for unlinked entries too)
+                    if item["source"] == "anilist" and item["id"] in al_list_map:
+                        list_entry = al_list_map[item["id"]]
+                        item["user_list_status"] = list_entry["status"]
+                        if not item.get("user_status"):
+                            item["user_status"] = list_entry["status"]
+                        if not item.get("user_progress"):
+                            item["user_progress"] = list_entry["progress"]
             except Exception as e:
                 logger.warning(f"Failed to enrich with user data: {e}")
 
@@ -636,6 +695,39 @@ async def add_to_anilist(
         raise
     except Exception as e:
         logger.error(f"Failed to add to AniList: {e}")
+        raise HTTPException(status_code=500, detail="Failed to add to AniList")
+
+
+@router.post("/anilist/add-by-id")
+async def add_to_anilist_by_id(
+    request: AddToAniListByIdRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Add manga to user's AniList list when the AniList ID is already known."""
+    try:
+        anilist_token = current_user.get("anilist_token")
+        if not anilist_token:
+            raise HTTPException(status_code=400, detail="AniList token not found")
+
+        # Map READING -> CURRENT for AniList API
+        status_map = {"READING": "CURRENT"}
+        al_status = status_map.get(request.status, request.status)
+
+        entry = await anilist_client.add_manga_to_list(
+            token=anilist_token,
+            manga_id=request.anilist_id,
+            status=al_status
+        )
+
+        return {
+            "message": "Added to AniList",
+            "anilist_entry": entry,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to add to AniList by ID: {e}")
         raise HTTPException(status_code=500, detail="Failed to add to AniList")
 
 
