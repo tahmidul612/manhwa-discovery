@@ -1,4 +1,4 @@
-MIT License
+# MIT License
 
 Copyright (c) 2026 Tahmidul Islam
 
@@ -27,23 +27,26 @@ SOFTWARE.
 This project uses data and APIs from the following third-party services:
 
 ### MangaDex
-- Website: https://mangadex.org
-- API: https://api.mangadex.org
-- Terms of Service: https://mangadex.org/terms
+
+- Website: <https://mangadex.org>
+- API: <https://api.mangadex.org>
+- Terms of Service: <https://mangadex.org/terms>
 
 All manga metadata, cover images, and chapter information are provided by MangaDex
 and remain the property of their respective copyright holders.
 
 ### AniList
-- Website: https://anilist.co
-- API: https://anilist.gitbook.io/anilist-apiv2-docs/
-- Terms of Service: https://anilist.co/terms
+
+- Website: <https://anilist.co>
+- API: <https://anilist.gitbook.io/anilist-apiv2-docs/>
+- Terms of Service: <https://anilist.co/terms>
 
 User data and manga information are accessed via the AniList API with user consent
 through OAuth2 authentication.
 
 ### Claude Code (Anthropic)
-- Website: https://claude.ai
+
+- Website: <https://claude.ai>
 - Developed by: Anthropic PBC
 
 This project was developed with assistance from Claude, Anthropic's AI assistant.
