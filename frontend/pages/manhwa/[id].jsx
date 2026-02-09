@@ -1,19 +1,25 @@
 import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
   Star, BookOpen, Calendar, Clock, Tag,
   ExternalLink, ChevronDown, Loader2,
+  Link2, LinkIcon, Unlink, Wrench,
 } from 'lucide-react';
 import { apiClient } from '../../services/api';
+import { useAuthStore } from '../../stores/useAuthStore';
 import ComparisonView from '../../components/ComparisonView';
+import LinkManagementModal from '../../components/LinkManagementModal';
 
 export default function ManhwaDetailPage() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const source = searchParams.get('source') || 'mangadex';
   const [showAllChapters, setShowAllChapters] = useState(false);
+  const [linkModal, setLinkModal] = useState({ open: false, mode: 'link' });
+  const { isAuthenticated } = useAuthStore();
+  const queryClient = useQueryClient();
 
   const { data: manhwa, isLoading, error } = useQuery({
     queryKey: ['manhwa', id, source],
@@ -26,6 +32,14 @@ export default function ManhwaDetailPage() {
     queryFn: () => apiClient.getChapters(id),
     enabled: source === 'mangadex',
     select: (res) => res.data,
+  });
+
+  const unlinkMutation = useMutation({
+    mutationFn: (connectionId) => apiClient.removeConnection(connectionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['manhwa', id, source] });
+      queryClient.invalidateQueries({ queryKey: ['userLists'] });
+    },
   });
 
   if (isLoading) {
@@ -46,6 +60,13 @@ export default function ManhwaDetailPage() {
 
   const chapters = chaptersData?.chapters || [];
   const displayChapters = showAllChapters ? chapters : chapters.slice(0, 20);
+  const isLinked = manhwa.is_linked;
+  const connection = manhwa.connection;
+
+  // Chapter progress from connection data
+  const userProgress = connection?.anilist_data?.progress;
+  const totalChapters = connection?.mangadex_data?.chapters_count || manhwa.chapters_count;
+  const hasProgress = userProgress != null && userProgress > 0;
 
   return (
     <div className="space-y-8 max-w-4xl mx-auto">
@@ -84,10 +105,10 @@ export default function ManhwaDetailPage() {
                   {typeof manhwa.rating === 'number' ? manhwa.rating.toFixed(1) : manhwa.rating}/10
                 </span>
               )}
-              {manhwa.chapters_count && (
+              {totalChapters && (
                 <span className="flex items-center gap-1.5">
                   <BookOpen className="w-4 h-4" />
-                  {manhwa.chapters_count} chapters
+                  {hasProgress ? `${userProgress} / ${totalChapters}` : totalChapters} chapters
                 </span>
               )}
               {manhwa.year && (
@@ -104,6 +125,21 @@ export default function ManhwaDetailPage() {
               )}
             </div>
 
+            {/* Chapter progress bar */}
+            {hasProgress && totalChapters > 0 && (
+              <div className="w-full max-w-xs">
+                <div className="w-full h-2 rounded-full bg-surface-elevated overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-accent-primary"
+                    style={{ width: `${Math.min(100, (userProgress / totalChapters) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-xs text-text-tertiary mt-1">
+                  {Math.round((userProgress / totalChapters) * 100)}% read
+                </p>
+              </div>
+            )}
+
             {/* Tags */}
             {manhwa.tags?.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
@@ -119,8 +155,8 @@ export default function ManhwaDetailPage() {
               </div>
             )}
 
-            {/* External links */}
-            <div className="flex gap-3 pt-2">
+            {/* External links + Link management */}
+            <div className="flex flex-wrap gap-3 pt-2">
               {source === 'mangadex' && (
                 <a
                   href={`https://mangadex.org/title/${id}`}
@@ -142,6 +178,47 @@ export default function ManhwaDetailPage() {
                   <ExternalLink className="w-3.5 h-3.5" />
                   AniList
                 </a>
+              )}
+
+              {/* Link management buttons */}
+              {isAuthenticated && source === 'anilist' && (
+                <>
+                  {isLinked ? (
+                    <div className="flex gap-2">
+                      <span className="inline-flex items-center gap-1 text-sm text-green-400">
+                        <Link2 className="w-3.5 h-3.5" />
+                        Linked
+                      </span>
+                      <button
+                        onClick={() => setLinkModal({ open: true, mode: 'relink' })}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg glass hover:bg-yellow-500/20 text-sm text-yellow-400 transition-colors"
+                      >
+                        <Wrench className="w-3.5 h-3.5" />
+                        Fix Link
+                      </button>
+                      <button
+                        onClick={() => unlinkMutation.mutate(connection?._id)}
+                        disabled={unlinkMutation.isPending}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg glass hover:bg-red-500/20 text-sm text-red-400 transition-colors disabled:opacity-50"
+                      >
+                        {unlinkMutation.isPending ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Unlink className="w-3.5 h-3.5" />
+                        )}
+                        Unlink
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setLinkModal({ open: true, mode: 'link' })}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg glass hover:bg-accent-primary/20 text-sm text-accent-primary transition-colors"
+                    >
+                      <LinkIcon className="w-3.5 h-3.5" />
+                      Link to MangaDex
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -227,6 +304,14 @@ export default function ManhwaDetailPage() {
           )}
         </div>
       )}
+
+      {/* Link modal */}
+      <LinkManagementModal
+        isOpen={linkModal.open}
+        onClose={() => setLinkModal({ open: false, mode: 'link' })}
+        manhwa={manhwa}
+        mode={linkModal.mode}
+      />
     </div>
   );
 }

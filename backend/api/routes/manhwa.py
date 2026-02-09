@@ -106,6 +106,37 @@ def _parse_anilist_manga(data: dict) -> dict:
     }
 
 
+async def _enrich_with_connection(
+    parsed: dict, current_user: dict,
+    anilist_id: str = None, mangadex_id: str = None
+) -> dict:
+    """Add connection data to a detail response if the user has a link for this manga."""
+    try:
+        db = get_db()
+        query = {"user_id": ObjectId(current_user["_id"])}
+        if anilist_id:
+            query["anilist_id"] = anilist_id
+        elif mangadex_id:
+            query["mangadex_id"] = mangadex_id
+        else:
+            return parsed
+
+        conn = await db.manhwa_connections.find_one(query)
+        if conn:
+            conn["_id"] = str(conn["_id"])
+            conn["user_id"] = str(conn["user_id"])
+            parsed["connection"] = conn
+            parsed["is_linked"] = True
+        else:
+            parsed["connection"] = None
+            parsed["is_linked"] = False
+    except Exception as e:
+        logger.warning(f"Failed to enrich with connection: {e}")
+        parsed["connection"] = None
+        parsed["is_linked"] = False
+    return parsed
+
+
 def apply_filters(results: List[dict], filters: dict) -> List[dict]:
     """Apply search filters to results"""
     filtered = results
@@ -337,13 +368,23 @@ async def get_manhwa_details(
             except Exception:
                 pass
 
+            # Enrich with connection data if user is authenticated
+            if current_user:
+                parsed = await _enrich_with_connection(parsed, current_user, mangadex_id=manhwa_id)
+
             return parsed
 
         else:  # anilist
             result = await anilist_client.get_manga_details(int(manhwa_id))
             if not result:
                 raise HTTPException(status_code=404, detail="Manga not found on AniList")
-            return _parse_anilist_manga(result)
+            parsed = _parse_anilist_manga(result)
+
+            # Enrich with connection data if user is authenticated
+            if current_user:
+                parsed = await _enrich_with_connection(parsed, current_user, anilist_id=str(manhwa_id))
+
+            return parsed
 
     except HTTPException:
         raise
