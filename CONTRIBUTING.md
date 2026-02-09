@@ -1,18 +1,24 @@
+---
+"markdown.extension.toc.levels": "2..2"
+---
+
 # 🤝 Contributing to Manhwa Discovery
 
 Thank you for your interest in contributing to Manhwa Discovery! This document provides guidelines and instructions for contributing to the project.
 
 ## 📋 Table of Contents
 
-- [Code of Conduct](#code-of-conduct)
-- [Getting Started](#getting-started)
-- [Development Environment](#development-environment)
-- [Project Structure](#project-structure)
-- [Coding Standards](#coding-standards)
-- [Commit Conventions](#commit-conventions)
-- [Pull Request Process](#pull-request-process)
-- [Testing Guidelines](#testing-guidelines)
-- [Getting Help](#getting-help)
+- [📋 Table of Contents](#-table-of-contents)
+- [📜 Code of Conduct](#-code-of-conduct)
+- [🚀 Getting Started](#-getting-started)
+- [💻 Development Environment](#-development-environment)
+- [📁 Project Structure](#-project-structure)
+- [🎨 Coding Standards](#-coding-standards)
+- [📝 Commit Conventions](#-commit-conventions)
+- [🔀 Pull Request Process](#-pull-request-process)
+- [🧪 Testing Guidelines](#-testing-guidelines)
+- [🆘 Getting Help](#-getting-help)
+- [🙏 Attribution](#-attribution)
 
 ---
 
@@ -40,35 +46,39 @@ Before you begin, ensure you have the following installed:
 1. **Fork the repository** on GitHub
 
 2. **Clone your fork**:
+
    ```bash
    git clone https://github.com/YOUR_USERNAME/manhwa-discovery.git
    cd manhwa-discovery
    ```
 
 3. **Add upstream remote**:
+
    ```bash
    git remote add upstream https://github.com/tahmidul612/manhwa-discovery.git
    ```
 
 4. **Copy environment configuration**:
+
    ```bash
    cp .env.example .env
    ```
 
 5. **Edit `.env`** with your AniList OAuth credentials:
-   - Create an AniList app at https://anilist.co/settings/developer
+   - Create an AniList app at <https://anilist.co/settings/developer>
    - Set `ANILIST_CLIENT_ID` and `ANILIST_CLIENT_SECRET`
    - Generate strong random strings for `JWT_SECRET` and `SESSION_SECRET`
 
 6. **Start the development stack**:
+
    ```bash
    docker compose up
    ```
 
 7. **Verify the installation**:
-   - Frontend: http://localhost:3009
-   - Backend: http://localhost:8009/docs (FastAPI Swagger UI)
-   - Health check: http://localhost:8009/health
+   - Frontend: <http://localhost:3009>
+   - Backend: <http://localhost:8009/docs> (FastAPI Swagger UI)
+   - Health check: <http://localhost:8009/health>
 
 ---
 
@@ -143,7 +153,7 @@ npm run preview
 
 ### Backend (`/backend`)
 
-```
+```text
 backend/
 ├── api/
 │   ├── routes/          # API endpoints (auth, user, manhwa)
@@ -163,7 +173,7 @@ backend/
 
 ### Frontend (`/frontend`)
 
-```
+```text
 frontend/
 ├── src/
 │   ├── main.jsx         # React DOM render, React Query setup
@@ -192,22 +202,26 @@ frontend/
   - Lock file: `uv.lock` (not requirements.txt)
 
 - **Code Formatting**: Black with default settings
+
   ```bash
   uv run black backend/
   ```
 
 - **Linting**: Ruff with default settings
+
   ```bash
   uv run ruff check backend/
   ```
 
 - **Type Hints**: Required on all functions
+
   ```python
   def get_user(user_id: int) -> User:
       pass
   ```
 
 - **Async/Await**: All external API calls must be async
+
   ```python
   # Use asyncio.gather() for parallel calls
   results = await asyncio.gather(
@@ -217,6 +231,7 @@ frontend/
   ```
 
 - **Docstrings**: Required on public functions
+
   ```python
   def calculate_confidence(title1: str, title2: str) -> float:
       """
@@ -232,6 +247,7 @@ frontend/
   ```
 
 - **Logging**: Use the configured logger
+
   ```python
   import logging
   logger = logging.getLogger(__name__)
@@ -244,6 +260,7 @@ frontend/
 - **No ESLint/Prettier**: Uses Vite and React defaults
 
 - **Component Structure**: Functional components with hooks
+
   ```jsx
   export function ManhwaCard({ manga, onSelect }) {
     const [isHovered, setIsHovered] = useState(false);
@@ -257,11 +274,13 @@ frontend/
   - **useState**: For component-local state
 
 - **Styling**: Tailwind CSS utility classes (no inline styles)
+
   ```jsx
   <div className="bg-slate-800/70 backdrop-blur-lg rounded-xl p-6">
   ```
 
 - **API Calls**: Use the Axios client from `services/api.js`
+
   ```javascript
   import api from '../services/api';
   const response = await api.get('/manhwa/search', { params: { query } });
@@ -270,6 +289,7 @@ frontend/
 ### Anti-Patterns (NEVER DO THIS)
 
 **Backend:**
+
 - ❌ NEVER use sync DB calls (use `motor`, not `pymongo`)
 - ❌ NEVER skip JWT auth on protected routes
 - ❌ NEVER lower auto-match confidence below 0.80
@@ -277,6 +297,7 @@ frontend/
 - ❌ NEVER enable DEBUG in production
 
 **Frontend:**
+
 - ❌ NEVER store sensitive data unencrypted in localStorage
 - ❌ NEVER hardcode API URLs (use `import.meta.env.VITE_API_URL`)
 - ❌ NEVER skip error handling on API calls
@@ -289,7 +310,7 @@ We follow **Conventional Commits** for clear, standardized commit messages:
 
 ### Format
 
-```
+```text
 <type>(<scope>): <description>
 
 [optional body]
@@ -340,7 +361,7 @@ BREAKING CHANGE: Search results now return nested objects instead of flat arrays
 
 ## 🔀 Pull Request Process
 
-### 1. Create a Feature Branch
+### Create a Feature Branch
 
 Use descriptive branch names following this pattern:
 
@@ -355,14 +376,14 @@ git checkout -b fix/cache-invalidation
 git checkout -b docs/api-reference
 ```
 
-### 2. Make Your Changes
+### Make Your Changes
 
-- Follow the [coding standards](#coding-standards)
-- Write clear commit messages using [conventional commits](#commit-conventions)
+- Follow the [coding standards](#-coding-standards)
+- Write clear commit messages using [conventional commits](#-commit-conventions)
 - Test your changes thoroughly
 - Update documentation if needed
 
-### 3. Keep Your Branch Updated
+### Keep Your Branch Updated
 
 ```bash
 # Fetch latest changes from upstream
@@ -375,7 +396,7 @@ git rebase upstream/main
 git push origin your-branch-name --force-with-lease
 ```
 
-### 4. Run Linters and Tests
+### Run Linters and Tests
 
 Before submitting, ensure your code passes all checks:
 
@@ -391,7 +412,7 @@ npm run lint  # (when configured)
 npm run test  # (when tests are implemented)
 ```
 
-### 5. Submit the Pull Request
+### Submit the Pull Request
 
 1. Push your branch to your fork on GitHub
 2. Open a Pull Request against the `main` branch of the upstream repository
@@ -402,7 +423,7 @@ npm run test  # (when tests are implemented)
    - **Screenshots**: For UI changes
    - **Breaking Changes**: If any
 
-### 6. PR Review Checklist
+### PR Review Checklist
 
 Your PR should meet these criteria:
 
@@ -414,7 +435,7 @@ Your PR should meet these criteria:
 - ✅ Manually tested in local environment
 - ✅ PR description is clear and complete
 
-### 7. Address Review Feedback
+### Address Review Feedback
 
 - Respond to all review comments
 - Make requested changes in new commits (don't force push during review)
@@ -437,6 +458,7 @@ The project has test infrastructure in place but tests are not yet implemented:
 If you'd like to contribute test implementations:
 
 1. **Backend Tests** (Pytest + pytest-asyncio):
+
    ```python
    # tests/backend/test_comparison.py
    import pytest
@@ -448,6 +470,7 @@ If you'd like to contribute test implementations:
    ```
 
 2. **Frontend Tests** (Jest + React Testing Library):
+
    ```javascript
    // tests/frontend/components/ManhwaCard.test.jsx
    import { render, screen } from '@testing-library/react';
@@ -465,7 +488,7 @@ For now, all changes must be manually tested:
 
 1. Start the full stack: `docker compose up`
 2. Test the affected features through the UI
-3. Check API responses using Swagger UI at http://localhost:8009/docs
+3. Check API responses using Swagger UI at <http://localhost:8009/docs>
 4. Verify MongoDB data using a MongoDB client
 5. Check logs for errors: `docker compose logs -f`
 
@@ -476,7 +499,7 @@ For now, all changes must be manually tested:
 ### Resources
 
 - **Technical Documentation**: See [`AGENTS.md`](AGENTS.md) for detailed architecture
-- **API Reference**: http://localhost:8009/docs (FastAPI Swagger UI)
+- **API Reference**: <http://localhost:8009/docs> (FastAPI Swagger UI)
 - **Backend Knowledge Base**: [`backend/AGENTS.md`](backend/AGENTS.md)
 - **Frontend Knowledge Base**: [`frontend/AGENTS.md`](frontend/AGENTS.md)
 
