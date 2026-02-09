@@ -1,20 +1,283 @@
-# User-related routes
-# TODO: Implement routes for:
-# - Get user profile
-# - Get user's manhwa list from AniList
-# - Update user preferences
+# User list and sync routes
+import logging
+from typing import Optional
+from datetime import datetime
+from fastapi import APIRouter, HTTPException, Depends, Query
+from bson import ObjectId
+from backend.api.middleware.auth import get_current_user
+from backend.database.connection import get_db
+from backend.database.cache import cache_service
+from backend.services.anilist.client import anilist_client
+from backend.services.comparison import comparison_service
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
 
 
-def get_user_profile():
-    """Get user profile information"""
-    pass
+def _extract_cover_url(mangadex_data: dict) -> Optional[str]:
+    """Extract cover URL from MangaDex manga data"""
+    for rel in mangadex_data.get("relationships", []):
+        if rel.get("type") == "cover_art":
+            filename = rel.get("attributes", {}).get("fileName")
+            if filename:
+                manga_id = mangadex_data.get("id", "")
+                return f"https://uploads.mangadex.org/covers/{manga_id}/{filename}"
+    return None
 
 
-def get_user_list():
-    """Get user's manhwa list from AniList"""
-    pass
+def _extract_alt_titles(mangadex_data: dict) -> list[str]:
+    """Extract alternative titles from MangaDex data"""
+    alt_titles = []
+    for alt in mangadex_data.get("attributes", {}).get("altTitles", []):
+        alt_titles.extend(alt.values())
+    return alt_titles
 
 
-def update_user_preferences():
-    """Update user preferences and settings"""
-    pass
+@router.get("/{user_id}/lists")
+async def get_user_lists(
+    user_id: str,
+    status: Optional[str] = Query(None, description="Filter by status: READING, COMPLETED, PAUSED, DROPPED, PLANNING"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get user's AniList manga lists grouped by status,
+    enriched with MangaDex data from existing connections.
+    """
+    # Verify user is requesting their own data
+    if current_user["_id"] != user_id and current_user.get("anilist_id") != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    try:
+        # Get AniList user ID
+        anilist_id = current_user.get("anilist_id")
+        if not anilist_id:
+            raise HTTPException(status_code=400, detail="AniList ID not found for user")
+
+        # Fetch manga list from AniList
+        anilist_token = current_user.get("anilist_token")
+        lists = await anilist_client.get_user_manga_list(
+            user_id=int(anilist_id),
+            token=anilist_token,
+            status=status
+        )
+
+        # Enrich with MangaDex data from existing connections
+        db = get_db()
+        connections = await db.manhwa_connections.find(
+            {"user_id": ObjectId(current_user["_id"])}
+        ).to_list(length=None)
+
+        # Build lookup by AniList ID
+        connection_map = {
+            str(c.get("anilist_id")): c for c in connections
+        }
+
+        # Enrich each list entry
+        enriched_lists = {}
+        for list_status, entries in lists.items():
+            enriched_entries = []
+            for entry in entries:
+                media = entry.get("media", {})
+                media_id = str(media.get("id", ""))
+                enriched_entry = {
+                    **entry,
+                    "connection": None,
+                    "mangadex_data": None,
+                    "is_linked": False
+                }
+
+                conn = connection_map.get(media_id)
+                if conn:
+                    conn["_id"] = str(conn["_id"])
+                    conn["user_id"] = str(conn["user_id"])
+                    enriched_entry["connection"] = conn
+                    enriched_entry["mangadex_data"] = conn.get("mangadex_data")
+                    enriched_entry["is_linked"] = True
+
+                enriched_entries.append(enriched_entry)
+
+            enriched_lists[list_status] = enriched_entries
+
+        total_entries = sum(len(v) for v in enriched_lists.values())
+        total_linked = sum(
+            1 for entries in enriched_lists.values()
+            for e in entries if e["is_linked"]
+        )
+
+        return {
+            "lists": enriched_lists,
+            "total_entries": total_entries,
+            "total_linked": total_linked,
+            "user_id": user_id
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch user lists: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch user lists")
+
+
+@router.post("/{user_id}/sync")
+async def sync_user_list(
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Force sync with AniList, run auto-matching algorithm,
+    and store/update connections in database.
+    """
+    if current_user["_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    try:
+        anilist_id = current_user.get("anilist_id")
+        anilist_token = current_user.get("anilist_token")
+
+        if not anilist_id:
+            raise HTTPException(status_code=400, detail="AniList ID not found")
+
+        # Clear cache to force fresh fetch
+        await cache_service.clear_user_cache(str(anilist_id))
+
+        # Fetch fresh manga list from AniList
+        lists = await anilist_client.get_user_manga_list(
+            user_id=int(anilist_id),
+            token=anilist_token
+        )
+
+        # Flatten all entries
+        all_entries = []
+        for entries in lists.values():
+            all_entries.extend(entries)
+
+        if not all_entries:
+            return {"message": "No entries found in AniList", "matched": 0, "total": 0}
+
+        # Get existing connections to avoid re-matching
+        db = get_db()
+        existing = await db.manhwa_connections.find(
+            {"user_id": ObjectId(user_id)}
+        ).to_list(length=None)
+        existing_anilist_ids = {str(c["anilist_id"]) for c in existing}
+
+        # Filter to unmatched entries only
+        unmatched = [
+            e for e in all_entries
+            if str(e.get("media", {}).get("id", "")) not in existing_anilist_ids
+        ]
+
+        logger.info(f"Syncing: {len(all_entries)} total, {len(existing)} existing, {len(unmatched)} to match")
+
+        # Run auto-matching on unmatched entries
+        matched = await comparison_service.auto_match_user_list(
+            user_id=user_id,
+            anilist_list=unmatched
+        )
+
+        # Store new connections
+        new_connections = 0
+        for match in matched:
+            try:
+                md_data = match["mangadex_data"]
+                al_entry = match["anilist_entry"]
+                media = al_entry.get("media", {})
+                attrs = md_data.get("attributes", {})
+
+                connection_doc = {
+                    "user_id": ObjectId(user_id),
+                    "anilist_id": str(media.get("id", "")),
+                    "mangadex_id": md_data.get("id", ""),
+                    "anilist_data": {
+                        "id": str(media.get("id", "")),
+                        "title": media.get("title", {}),
+                        "alternative_titles": media.get("synonyms", []),
+                        "status": al_entry.get("status"),
+                        "progress": al_entry.get("progress", 0),
+                        "score": al_entry.get("score"),
+                        "cover_image": media.get("coverImage", {}).get("large"),
+                        "chapters": media.get("chapters"),
+                        "average_score": media.get("averageScore"),
+                        "start_date": media.get("startDate"),
+                        "updated_at": datetime.utcnow()
+                    },
+                    "mangadex_data": {
+                        "id": md_data.get("id", ""),
+                        "title": attrs.get("title", {}).get("en", ""),
+                        "alternative_titles": _extract_alt_titles(md_data),
+                        "description": (attrs.get("description", {}) or {}).get("en", ""),
+                        "cover_url": _extract_cover_url(md_data),
+                        "year": attrs.get("year"),
+                        "status": attrs.get("status"),
+                        "tags": [t.get("attributes", {}).get("name", {}).get("en", "")
+                                 for t in attrs.get("tags", [])],
+                        "last_updated": attrs.get("updatedAt"),
+                    },
+                    "match_confidence": match["confidence"],
+                    "manually_linked": False,
+                    "created_at": datetime.utcnow(),
+                    "updated_at": datetime.utcnow()
+                }
+
+                await db.manhwa_connections.update_one(
+                    {"user_id": ObjectId(user_id), "anilist_id": str(media.get("id", ""))},
+                    {"$set": connection_doc},
+                    upsert=True
+                )
+                new_connections += 1
+
+            except Exception as e:
+                logger.error(f"Failed to store connection: {e}")
+
+        return {
+            "message": "Sync completed",
+            "total_entries": len(all_entries),
+            "already_linked": len(existing),
+            "newly_matched": new_connections,
+            "unmatched": len(unmatched) - new_connections
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Sync failed: {e}")
+        raise HTTPException(status_code=500, detail="Sync failed")
+
+
+@router.get("/{user_id}/connections")
+async def get_user_connections(
+    user_id: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get paginated AniList-MangaDex connections for a user"""
+    if current_user["_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    try:
+        db = get_db()
+
+        total = await db.manhwa_connections.count_documents({"user_id": ObjectId(user_id)})
+
+        connections = await db.manhwa_connections.find(
+            {"user_id": ObjectId(user_id)}
+        ).sort("updated_at", -1).skip(skip).limit(limit).to_list(length=limit)
+
+        # Serialize ObjectIds
+        for conn in connections:
+            conn["_id"] = str(conn["_id"])
+            conn["user_id"] = str(conn["user_id"])
+
+        return {
+            "connections": connections,
+            "total": total,
+            "skip": skip,
+            "limit": limit,
+            "has_next": skip + limit < total
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to fetch connections: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch connections")
