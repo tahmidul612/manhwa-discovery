@@ -1,10 +1,10 @@
-<div align="center">
-
 # 📚 Manhwa Discovery
 
-### *Bridge Your Reading Lists Across Platforms*
+> *Bridge Your Reading Lists Across Platforms*
 
 Unified manga/manhwa discovery platform that bridges your AniList reading lists with MangaDex's catalog. Search, link, filter, and manage your collection from one place.
+
+<div align="center">
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactjs.org/)
@@ -19,17 +19,33 @@ Unified manga/manhwa discovery platform that bridges your AniList reading lists 
 
 ## 📖 Table of Contents
 
-- [Features](#-features)
-- [Attributions & Credits](#-attributions--credits)
-- [Tech Stack](#-tech-stack)
-- [Project Structure](#-project-structure)
-- [Quick Start](#-quick-start)
-- [Development](#-development)
-- [API Endpoints](#-api-endpoints)
-- [External APIs](#-external-apis)
-- [Environment Variables](#-environment-variables)
-- [Contributing](#-contributing)
-- [License](#-license)
+- [📖 Table of Contents](#-table-of-contents)
+- [✨ Features](#-features)
+- [🙏 Attributions \& Credits](#-attributions--credits)
+  - [Built With \& Powered By](#built-with--powered-by)
+  - [📜 Data Usage \& Attribution](#-data-usage--attribution)
+- [🛠️ Tech Stack](#️-tech-stack)
+- [📁 Project Structure](#-project-structure)
+- [🚀 Quick Start](#-quick-start)
+  - [Prerequisites](#prerequisites)
+  - [1. Configure environment](#1-configure-environment)
+  - [2. Start the stack](#2-start-the-stack)
+  - [3. Verify](#3-verify)
+- [💻 Development](#-development)
+  - [Backend (without Docker)](#backend-without-docker)
+  - [Frontend (without Docker)](#frontend-without-docker)
+  - [Running both with Docker](#running-both-with-docker)
+- [🔌 API Endpoints](#-api-endpoints)
+  - [Auth](#auth)
+  - [User Lists](#user-lists)
+  - [Manhwa](#manhwa)
+  - [Health](#health)
+- [🌐 External APIs](#-external-apis)
+- [⚙️ Environment Variables](#️-environment-variables)
+- [🤝 Contributing](#-contributing)
+- [📄 License](#-license)
+- [🔒 Security](#-security)
+- [📞 Support \& Community](#-support--community)
 
 ## ✨ Features
 
@@ -54,7 +70,7 @@ This project wouldn't exist without the incredible work of these platforms and t
 <table>
 <tr>
 <td align="center" width="33%">
-<img src="https://raw.githubusercontent.com/anthropics/anthropic-sdk-python/main/assets/anthropic-logo.svg" alt="Claude" width="120" height="120" style="margin: 20px 0;"><br>
+<img src="https://cdn.simpleicons.org/claude" alt="Claude" width="120" height="120" style="margin: 20px 0;"><br>
 <h3>🤖 Claude Code</h3>
 <p><strong>AI-Powered Development</strong></p>
 <p>This project was built with assistance from Claude, Anthropic's AI assistant. Claude Code helped architect the codebase, implement fuzzy matching algorithms, and ensure best practices throughout development.</p>
@@ -77,6 +93,8 @@ This project wouldn't exist without the incredible work of these platforms and t
 </tr>
 </table>
 
+</div>
+
 ### 📜 Data Usage & Attribution
 
 - **MangaDex**: All manga metadata, cover images, and chapter information are provided by [MangaDex](https://mangadex.org) under their [Terms of Service](https://mangadex.org/terms).
@@ -84,8 +102,6 @@ This project wouldn't exist without the incredible work of these platforms and t
 - **Claude Code**: Development assistance and code architecture provided by [Anthropic's Claude](https://claude.ai).
 
 > **Important**: This is an unofficial fan project. It is not affiliated with, endorsed by, or connected to MangaDex or AniList. All trademarks and service marks are the property of their respective owners.
-
-</div>
 
 ---
 
@@ -290,8 +306,8 @@ For information about reporting security vulnerabilities, please see our [SECURI
 
 <div align="center">
 
-**Made with ❤️ by the Manhwa Discovery team**
+--  **Made with ❤️ by the Manhwa Discovery team (me and Claude Code 😜)** --
 
-*Powered by Claude Code, MangaDex, and AniList*
+Powered by *MangaDex and AniList*
 
 </div>
