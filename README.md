@@ -15,7 +15,7 @@ Unified manga/manhwa discovery platform that bridges your AniList reading lists 
 ## Tech Stack
 
 | Layer | Tech |
-|-------|------|
+| ------- | ------ |
 | Backend | Python 3.14, FastAPI, uvicorn |
 | Frontend | React 18, Vite, Tailwind CSS, Framer Motion |
 | Database | MongoDB 7 (Motor async driver) |
@@ -26,7 +26,7 @@ Unified manga/manhwa discovery platform that bridges your AniList reading lists 
 
 ## Project Structure
 
-```
+```text
 manhwa-discovery/
 ├── backend/
 │   ├── api/
@@ -84,9 +84,9 @@ docker compose up
 This starts all four services:
 
 | Service | URL | Purpose |
-|---------|-----|---------|
-| Frontend | http://localhost:3009 | Vite dev server with HMR |
-| Backend | http://localhost:8009 | FastAPI with auto-reload |
+| --------- | ----- | --------- |
+| Frontend | <http://localhost:3009> | Vite dev server with HMR |
+| Backend | <http://localhost:8009> | FastAPI with auto-reload |
 | MongoDB | localhost:27017 | Database |
 | Redis | localhost:6379 | Cache |
 
@@ -137,16 +137,19 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ## API Endpoints
 
 ### Auth
+
 - `GET /auth/anilist/login` - Get AniList OAuth URL
 - `GET /auth/anilist/callback` - Handle OAuth callback
 - `GET /auth/me` - Current user info
 
 ### User Lists
+
 - `GET /users/{id}/lists` - AniList manga lists grouped by status
 - `POST /users/{id}/sync` - Force sync and auto-match with MangaDex
 - `GET /users/{id}/connections` - All AniList-MangaDex links
 
 ### Manhwa
+
 - `GET /manhwa/search` - Global search with filters and sorting
 - `GET /manhwa/{id}` - Manga details from MangaDex or AniList
 - `POST /manhwa/connect` - Create AniList-MangaDex link
@@ -155,19 +158,20 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 - `GET /manhwa/{id}/chapters` - Chapter list
 
 ### Health
+
 - `GET /health` - Service health (DB + cache status)
 
 ## External APIs
 
-- **MangaDex**: https://api.mangadex.org/docs/
-- **AniList GraphQL**: https://anilist.gitbook.io/anilist-apiv2-docs/
+- **MangaDex**: <https://api.mangadex.org/docs/>
+- **AniList GraphQL**: <https://anilist.gitbook.io/anilist-apiv2-docs/>
 
 ## Environment Variables
 
 See [`.env.example`](.env.example) for the full list. Key variables:
 
 | Variable | Description |
-|----------|-------------|
+| ---------- | ------------- |
 | `MONGODB_URL` | MongoDB connection string |
 | `REDIS_URL` | Redis connection string |
 | `ANILIST_CLIENT_ID` | AniList OAuth app client ID |
