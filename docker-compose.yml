@@ -50,6 +50,7 @@ services:
       - ./mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
     environment:
       - MONGO_INITDB_DATABASE=manhwa_discovery
+    command: ["mongod", "--quiet", "--logpath", "/dev/null"]
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
