@@ -14,7 +14,7 @@ from backend.services.anilist.client import anilist_client
 # Configure logging
 logging.basicConfig(
     level=logging.INFO if not settings.DEBUG else logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,11 @@ async def lifespan(app: FastAPI):
 
         # Connect to Redis cache
         await cache_service.connect()
-        logger.info("✓ Redis cache connected" if cache_service.is_connected() else "⚠ Redis unavailable, using MongoDB-only caching")
+        logger.info(
+            "✓ Redis cache connected"
+            if cache_service.is_connected()
+            else "⚠ Redis unavailable, using MongoDB-only caching"
+        )
 
         logger.info("✓ Application started successfully")
 
@@ -70,7 +74,7 @@ def create_app() -> FastAPI:
         description="Unified manga/manhwa discovery platform bridging AniList and MangaDex",
         version="1.0.0",
         lifespan=lifespan,
-        debug=settings.DEBUG
+        debug=settings.DEBUG,
     )
 
     # CORS middleware
@@ -80,7 +84,8 @@ def create_app() -> FastAPI:
             "http://localhost:3009",
             "http://localhost:5173",  # Vite default port
             "http://127.0.0.1:3009",
-            "http://127.0.0.1:5173"
+            "http://127.0.0.1:5173",
+            "https://manhwa.tahmidul612.com",  # Production domain
         ],
         allow_credentials=True,
         allow_methods=["*"],
@@ -100,8 +105,8 @@ def create_app() -> FastAPI:
                 "status": "healthy" if db_healthy else "unhealthy",
                 "database": "connected" if db_healthy else "disconnected",
                 "cache": "connected" if cache_healthy else "disconnected (fallback to MongoDB)",
-                "version": "1.0.0"
-            }
+                "version": "1.0.0",
+            },
         )
 
     @app.get("/", tags=["root"])
@@ -111,7 +116,7 @@ def create_app() -> FastAPI:
             "message": "Manhwa Discovery API",
             "version": "1.0.0",
             "docs": "/docs",
-            "health": "/health"
+            "health": "/health",
         }
 
     # Import and include routers
@@ -146,7 +151,7 @@ def main():
         host=settings.HOST,
         port=settings.PORT,
         reload=settings.DEBUG,
-        log_level="debug" if settings.DEBUG else "info"
+        log_level="debug" if settings.DEBUG else "info",
     )
 
 
