@@ -1,0 +1,25 @@
+{
+  "config": {
+    "line-length": false,
+    "no-duplicate-heading": false,
+    "no-trailing-spaces": true,
+    "no-multiple-blanks": true,
+    "no-missing-space-atx": true,
+    "no-multiple-space-atx": true,
+    "blanks-around-headings": true,
+    "heading-start-left": true,
+    "no-empty-links": true,
+    "no-inline-html": false,
+    "code-block-style": {
+      "style": "fenced"
+    }
+  },
+  "globs": [
+    "**/*.md"
+  ],
+  "ignores": [
+    "**/node_modules",
+    "**/CLAUDE.md",
+    "**/.venv/**"
+  ]
+}
