@@ -349,36 +349,43 @@ class MangaDexClient:
             counts[mid] = result if isinstance(result, (int, type(None))) else None
         return counts
 
+    async def get_latest_chapter(self, manga_id: str) -> Optional[str]:
+        """Get latest chapter number for a single manga, with caching."""
+        cache_key = f"mangadex:latest_chapter:{manga_id}"
+        cached = await cache_service.get_with_fallback(cache_key, "mangadex")
+        if cached is not None:
+            return cached.get("chapter")
+
+        try:
+            params = {
+                "manga": manga_id,
+                "translatedLanguage[]": "en",
+                "limit": 1,
+                "order[chapter]": "desc",
+            }
+            result = await self._request_with_retry("GET", "/chapter", params=params)
+            chapters = result.get("data", [])
+            chapter_num = (
+                chapters[0].get("attributes", {}).get("chapter", "N/A") if chapters else None
+            )
+
+            await cache_service.set_cached(
+                cache_key, {"chapter": chapter_num}, CacheTTL.CHAPTER_COUNT, "mangadex"
+            )
+            return chapter_num
+        except Exception as e:
+            logger.warning(f"Failed to fetch latest chapter for {manga_id}: {e}")
+            return None
+
     async def get_latest_chapters(self, manga_ids: List[str]) -> Dict[str, str]:
-        """
-        Get latest chapter number for multiple manga
-
-        Args:
-            manga_ids: List of MangaDex manga UUIDs
-
-        Returns:
-            Dictionary mapping manga_id to latest chapter number
-        """
-        latest_chapters = {}
-
-        for manga_id in manga_ids:
-            try:
-                params = {
-                    "manga": manga_id,
-                    "translatedLanguage[]": "en",
-                    "limit": 1,
-                    "order[chapter]": "desc",
-                }
-                result = await self._request_with_retry("GET", "/chapter", params=params)
-
-                chapters = result.get("data", [])
-                if chapters:
-                    chapter_num = chapters[0].get("attributes", {}).get("chapter", "N/A")
-                    latest_chapters[manga_id] = chapter_num
-            except Exception as e:
-                logger.warning(f"Failed to fetch latest chapter for {manga_id}: {e}")
-
-        return latest_chapters
+        """Get latest chapter number for multiple manga in parallel, with caching."""
+        tasks = {mid: self.get_latest_chapter(mid) for mid in manga_ids}
+        results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+        latest = {}
+        for mid, result in zip(tasks.keys(), results):
+            if not isinstance(result, BaseException) and result is not None:
+                latest[mid] = result
+        return latest
 
 
 # Global MangaDex client instance
