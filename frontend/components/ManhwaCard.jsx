@@ -51,6 +51,7 @@ export default function ManhwaCard({ manhwa, onHover, onLink, onUnlink, onFixLin
           alt={`Cover of ${manhwa.title}`}
           className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
           onLoad={() => setImgLoaded(true)}
+          onError={(e) => { e.target.onerror = null; e.target.src = '/placeholder.png'; setImgLoaded(true); }}
           loading="lazy"
         />
         {/* Gradient overlay */}

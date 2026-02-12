@@ -472,7 +472,7 @@ export default function UserListView({ userId, onStatsLoaded }) {
             const manhwa = {
               id: media.id,
               title: media.title?.english || media.title?.romaji || media.title?.native || 'Unknown',
-              cover_url: entry.mangadex_data?.cover_url || media.coverImage?.large,
+              cover_url: entry.mangadex_data?.cover_url || `/api/images/cover/anilist/${media.id}`,
               rating: media.averageScore ? media.averageScore / 10 : null,
               chapters_count: entry.mangadex_data?.chapters_count || media.chapters,
               year: media.startDate?.year,
