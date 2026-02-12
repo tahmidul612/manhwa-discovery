@@ -103,6 +103,7 @@ This project wouldn't exist without the incredible work of these platforms and t
 | Search | rapidfuzz for fuzzy string matching |
 | Auth | AniList OAuth2, JWT sessions |
 | Infra | Docker, docker compose |
+| Dev Tools | uv, Black, Ruff, Commitizen, pre-commit |
 
 ## 📁 Project Structure
 
@@ -262,7 +263,7 @@ See [`.env.example`](.env.example) for the full list. Key variables:
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for:
+We welcome contributions! Please see our [CONTRIBUTING.md](docs/CONTRIBUTING.md) for:
 
 - Development environment setup
 - Code standards and style guide
@@ -279,7 +280,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🔒 Security
 
-For information about reporting security vulnerabilities, please see our [SECURITY.md](SECURITY.md).
+For information about reporting security vulnerabilities, please see our [SECURITY.md](docs/SECURITY.md).
 
 ---
 
