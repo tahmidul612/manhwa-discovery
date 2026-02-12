@@ -1,10 +1,20 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Link, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
 import { BookOpen, Search, User, LogIn, LogOut } from 'lucide-react';
-import SearchPage from '../pages/search';
-import ProfilePage from '../pages/profile';
-import HomePage from '../pages/index';
-import ManhwaDetailPage from '../pages/manhwa/[id]';
+
+const HomePage = lazy(() => import('../pages/index'));
+const SearchPage = lazy(() => import('../pages/search'));
+const ProfilePage = lazy(() => import('../pages/profile'));
+const ManhwaDetailPage = lazy(() => import('../pages/manhwa/[id]'));
+
+function RouteSpinner() {
+  return (
+    <div className="flex items-center justify-center py-24">
+      <div className="w-8 h-8 border-2 border-accent-primary border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
 
 function Navbar() {
   const { isAuthenticated, user, logout } = useAuthStore();
@@ -63,14 +73,16 @@ export default function App() {
     <div className="min-h-screen">
       <Navbar />
       <main className="pt-20 px-4 max-w-7xl mx-auto pb-12">
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/manhwa/:id" element={<ManhwaDetailPage />} />
-          <Route path="/auth/callback" element={<AuthCallback />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <Suspense fallback={<RouteSpinner />}>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/manhwa/:id" element={<ManhwaDetailPage />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </main>
     </div>
   );
