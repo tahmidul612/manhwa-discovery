@@ -31,3 +31,32 @@ dependencies = [
     "black>=24.0.0",
     "ruff>=0.1.15",
 ]
+
+[dependency-groups]
+dev = [
+    "commitizen>=4.13.7",
+    "pre-commit>=4.5.1",
+]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.1.0"
+version_scheme = "pep440"
+version_provider = "pep621"
+update_changelog_on_bump = true
+major_version_zero = true
+tag_format = "v$version"
+changelog_file = "docs/CHANGELOG.md"
+changelog_incremental = true
+changelog_start_rev = "378e1ad"
+annotated_tag = true
+
+version_files = [
+    "pyproject.toml:^version",
+    "backend/__init__.py:^__version__",
+]
+
+[tool.commitizen.customize]
+bump_pattern = "^(feat|fix|perf|refactor|docs|style|test|build|ci|chore|revert)?(\\(.*\\))?!?:"
+bump_map = { "BREAKING CHANGE" = "MAJOR", "feat" = "MINOR", "fix" = "PATCH", "perf" = "PATCH", "refactor" = "PATCH" }
+change_type_order = ["BREAKING CHANGE", "feat", "fix", "refactor", "perf", "docs", "style", "test", "build", "ci", "chore"]
