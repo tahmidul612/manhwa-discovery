@@ -121,12 +121,18 @@ def create_app() -> FastAPI:
 
     # Import and include routers
     # Note: We'll create these route files next
+    # Cache-Control middleware
+    from backend.api.middleware.cache_headers import CacheHeaderMiddleware
+
+    app.add_middleware(CacheHeaderMiddleware)
+
     try:
-        from backend.api.routes import auth, user, manhwa
+        from backend.api.routes import auth, user, manhwa, images
 
         app.include_router(auth.router, prefix="/auth", tags=["auth"])
         app.include_router(user.router, prefix="/users", tags=["users"])
         app.include_router(manhwa.router, prefix="/manhwa", tags=["manhwa"])
+        app.include_router(images.router, prefix="/images", tags=["images"])
 
         logger.info("✓ All routes registered")
 

@@ -46,16 +46,12 @@ def _parse_mangadex_manga(data: dict) -> dict:
         iter(attrs.get("title", {}).values()), "Unknown"
     )
 
-    # Extract cover URL from relationships
-    cover_url = None
+    # Use image proxy for cover URL
+    cover_url = f"/images/cover/mangadex/{data['id']}"
     authors = []
     artists = []
     for rel in data.get("relationships", []):
-        if rel.get("type") == "cover_art":
-            filename = rel.get("attributes", {}).get("fileName")
-            if filename:
-                cover_url = f"https://uploads.mangadex.org/covers/{data['id']}/{filename}"
-        elif rel.get("type") == "author":
+        if rel.get("type") == "author":
             name = rel.get("attributes", {}).get("name")
             if name:
                 authors.append(name)
@@ -106,7 +102,7 @@ def _parse_anilist_manga(data: dict) -> dict:
         "title": title,
         "alternative_titles": data.get("synonyms", []),
         "description": data.get("description", ""),
-        "cover_url": data.get("coverImage", {}).get("large"),
+        "cover_url": f"/images/cover/anilist/{data.get('id', '')}",
         "authors": [],
         "artists": [],
         "genres": data.get("genres", []),
