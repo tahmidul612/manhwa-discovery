@@ -19,9 +19,11 @@ router = APIRouter()
 
 # --- Request/Response models ---
 
+
 class ConnectRequest(BaseModel):
     anilist_id: str
     mangadex_id: str
+
 
 class AddToAniListRequest(BaseModel):
     mangadex_id: str
@@ -36,10 +38,13 @@ class AddToAniListByIdRequest(BaseModel):
 
 # --- Helpers ---
 
+
 def _parse_mangadex_manga(data: dict) -> dict:
     """Parse raw MangaDex manga data into a unified format"""
     attrs = data.get("attributes", {})
-    title = attrs.get("title", {}).get("en") or next(iter(attrs.get("title", {}).values()), "Unknown")
+    title = attrs.get("title", {}).get("en") or next(
+        iter(attrs.get("title", {}).values()), "Unknown"
+    )
 
     # Extract cover URL from relationships
     cover_url = None
@@ -91,7 +96,9 @@ def _parse_mangadex_manga(data: dict) -> dict:
 def _parse_anilist_manga(data: dict) -> dict:
     """Parse raw AniList manga data into a unified format"""
     title_obj = data.get("title", {})
-    title = title_obj.get("english") or title_obj.get("romaji") or title_obj.get("native") or "Unknown"
+    title = (
+        title_obj.get("english") or title_obj.get("romaji") or title_obj.get("native") or "Unknown"
+    )
 
     return {
         "id": str(data.get("id", "")),
@@ -112,8 +119,7 @@ def _parse_anilist_manga(data: dict) -> dict:
 
 
 async def _enrich_with_connection(
-    parsed: dict, current_user: dict,
-    anilist_id: str = None, mangadex_id: str = None
+    parsed: dict, current_user: dict, anilist_id: str = None, mangadex_id: str = None
 ) -> dict:
     """Add connection and user list status to a detail response."""
     try:
@@ -160,8 +166,7 @@ async def _get_user_anilist_map(current_user: dict) -> dict:
         return {}
     try:
         lists = await anilist_client.get_user_manga_list(
-            user_id=int(al_id),
-            token=current_user.get("anilist_token")
+            user_id=int(al_id), token=current_user.get("anilist_token")
         )
         result = {}
         for entries in lists.values():
@@ -249,6 +254,7 @@ def deduplicate_results(mangadex_results: List[dict], anilist_results: List[dict
 
 # --- Endpoints ---
 
+
 @router.get("/trending")
 async def get_trending_manga(
     page: int = Query(1, ge=1),
@@ -326,11 +332,18 @@ async def browse_manga(
     genres: Optional[str] = Query(None, description="Comma-separated genres"),
     tags: Optional[str] = Query(None, description="Comma-separated tags"),
     country: Optional[str] = Query(None, description="Country code (KR, JP, CN, TW)"),
-    format: Optional[str] = Query(None, description="Comma-separated formats (MANGA, MANHWA, MANHUA, ONE_SHOT)"),
-    status: Optional[str] = Query(None, description="Media status (RELEASING, FINISHED, NOT_YET_RELEASED, CANCELLED, HIATUS)"),
+    format: Optional[str] = Query(
+        None, description="Comma-separated formats (MANGA, MANHWA, MANHUA, ONE_SHOT)"
+    ),
+    status: Optional[str] = Query(
+        None, description="Media status (RELEASING, FINISHED, NOT_YET_RELEASED, CANCELLED, HIATUS)"
+    ),
     year_min: Optional[int] = Query(None),
     year_max: Optional[int] = Query(None),
-    sort: str = Query("POPULARITY_DESC", description="Sort: POPULARITY_DESC, TRENDING_DESC, SCORE_DESC, START_DATE_DESC, FAVOURITES_DESC"),
+    sort: str = Query(
+        "POPULARITY_DESC",
+        description="Sort: POPULARITY_DESC, TRENDING_DESC, SCORE_DESC, START_DATE_DESC, FAVOURITES_DESC",
+    ),
 ):
     """Browse manga with filters using AniList"""
     try:
@@ -378,10 +391,12 @@ async def search_manhwa(
     status: Optional[str] = Query(None),
     release_year_min: Optional[int] = Query(None),
     release_year_max: Optional[int] = Query(None),
-    sort_by: str = Query("relevance", pattern="^(relevance|rating|chapters|latest_update|release_date)$"),
+    sort_by: str = Query(
+        "relevance", pattern="^(relevance|rating|chapters|latest_update|release_date)$"
+    ),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     user_id: Optional[str] = Query(None, description="Optional user ID to enrich with list status"),
-    current_user: Optional[dict] = Depends(get_optional_user)
+    current_user: Optional[dict] = Depends(get_optional_user),
 ):
     """
     Global search across AniList + MangaDex with fuzzy matching,
@@ -496,8 +511,11 @@ async def search_manhwa(
 
         # Calculate total from both sources
         md_total = md_results.get("total", 0) if isinstance(md_results, dict) else 0
-        al_total = (al_results.get("Page", {}).get("pageInfo", {}).get("total", 0)
-                    if isinstance(al_results, dict) else 0)
+        al_total = (
+            al_results.get("Page", {}).get("pageInfo", {}).get("total", 0)
+            if isinstance(al_results, dict)
+            else 0
+        )
         total = max(md_total, al_total)
 
         # Remove internal score field
@@ -509,7 +527,7 @@ async def search_manhwa(
             "total": total,
             "page": page,
             "per_page": per_page,
-            "has_next": offset + per_page < total
+            "has_next": offset + per_page < total,
         }
 
     except Exception as e:
@@ -521,7 +539,7 @@ async def search_manhwa(
 async def get_manhwa_details(
     manhwa_id: str,
     source: str = Query("mangadex", pattern="^(mangadex|anilist)$"),
-    current_user: Optional[dict] = Depends(get_optional_user)
+    current_user: Optional[dict] = Depends(get_optional_user),
 ):
     """Get detailed manhwa info from specified source"""
     try:
@@ -557,7 +575,9 @@ async def get_manhwa_details(
 
             # Enrich with connection data if user is authenticated
             if current_user:
-                parsed = await _enrich_with_connection(parsed, current_user, anilist_id=str(manhwa_id))
+                parsed = await _enrich_with_connection(
+                    parsed, current_user, anilist_id=str(manhwa_id)
+                )
 
             return parsed
 
@@ -570,8 +590,7 @@ async def get_manhwa_details(
 
 @router.post("/connect")
 async def create_connection(
-    request: ConnectRequest,
-    current_user: dict = Depends(get_current_user)
+    request: ConnectRequest, current_user: dict = Depends(get_current_user)
 ):
     """Manually create or update an AniList-MangaDex connection"""
     try:
@@ -626,29 +645,36 @@ async def create_connection(
                 "cover_url": cover_url,
                 "year": md_attrs.get("year"),
                 "status": md_attrs.get("status"),
-                "tags": [t.get("attributes", {}).get("name", {}).get("en", "")
-                         for t in md_attrs.get("tags", [])],
+                "tags": [
+                    t.get("attributes", {}).get("name", {}).get("en", "")
+                    for t in md_attrs.get("tags", [])
+                ],
             },
             "match_confidence": 1.0,
             "manually_linked": True,
             "created_at": now,
-            "updated_at": now
+            "updated_at": now,
         }
 
         result = await db.manhwa_connections.update_one(
             {"user_id": ObjectId(user_id), "anilist_id": request.anilist_id},
             {"$set": connection_doc},
-            upsert=True
+            upsert=True,
         )
 
         action = "updated" if result.matched_count > 0 else "created"
-        logger.info(f"Connection {action} for user {user_id}: AL:{request.anilist_id} <-> MD:{request.mangadex_id}")
+        logger.info(
+            f"Connection {action} for user {user_id}: AL:{request.anilist_id} <-> MD:{request.mangadex_id}"
+        )
 
-        return {"message": f"Connection {action}", "connection": {
-            **connection_doc,
-            "user_id": user_id,
-            "_id": str(result.upserted_id) if result.upserted_id else None
-        }}
+        return {
+            "message": f"Connection {action}",
+            "connection": {
+                **connection_doc,
+                "user_id": user_id,
+                "_id": str(result.upserted_id) if result.upserted_id else None,
+            },
+        }
 
     except HTTPException:
         raise
@@ -658,17 +684,13 @@ async def create_connection(
 
 
 @router.delete("/connect/{connection_id}")
-async def remove_connection(
-    connection_id: str,
-    current_user: dict = Depends(get_current_user)
-):
+async def remove_connection(connection_id: str, current_user: dict = Depends(get_current_user)):
     """Remove (unlink) an AniList-MangaDex connection"""
     try:
         db = get_db()
-        result = await db.manhwa_connections.delete_one({
-            "_id": ObjectId(connection_id),
-            "user_id": ObjectId(current_user["_id"])
-        })
+        result = await db.manhwa_connections.delete_one(
+            {"_id": ObjectId(connection_id), "user_id": ObjectId(current_user["_id"])}
+        )
 
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Connection not found")
@@ -685,8 +707,7 @@ async def remove_connection(
 
 @router.post("/anilist/add")
 async def add_to_anilist(
-    request: AddToAniListRequest,
-    current_user: dict = Depends(get_current_user)
+    request: AddToAniListRequest, current_user: dict = Depends(get_current_user)
 ):
     """
     Add manga to AniList from search results.
@@ -729,7 +750,9 @@ async def add_to_anilist(
                 anilist_title=al_title,
                 anilist_synonyms=synonyms,
                 mangadex_year=md_attrs.get("year"),
-                anilist_year=media.get("startDate", {}).get("year") if media.get("startDate") else None
+                anilist_year=(
+                    media.get("startDate", {}).get("year") if media.get("startDate") else None
+                ),
             )
             if confidence > best_confidence:
                 best_confidence = confidence
@@ -738,14 +761,15 @@ async def add_to_anilist(
         if not best_match or best_confidence < 0.70:
             raise HTTPException(
                 status_code=404,
-                detail=f"Could not find matching manga on AniList (best confidence: {best_confidence:.0%})"
+                detail=f"Could not find matching manga on AniList (best confidence: {best_confidence:.0%})",
             )
 
         # Add to AniList user's list
         entry = await anilist_client.add_manga_to_list(
             token=anilist_token,
             manga_id=best_match["id"],
-            status=request.status
+            status=request.status,
+            user_id=int(current_user.get("anilist_id")),
         )
 
         # Create connection
@@ -786,25 +810,27 @@ async def add_to_anilist(
                 "cover_url": cover_url,
                 "year": md_attrs.get("year"),
                 "status": md_attrs.get("status"),
-                "tags": [t.get("attributes", {}).get("name", {}).get("en", "")
-                         for t in md_attrs.get("tags", [])],
+                "tags": [
+                    t.get("attributes", {}).get("name", {}).get("en", "")
+                    for t in md_attrs.get("tags", [])
+                ],
             },
             "match_confidence": best_confidence,
             "manually_linked": True,
             "created_at": now,
-            "updated_at": now
+            "updated_at": now,
         }
 
         await db.manhwa_connections.update_one(
             {"user_id": ObjectId(user_id), "anilist_id": str(best_match["id"])},
             {"$set": connection_doc},
-            upsert=True
+            upsert=True,
         )
 
         return {
             "message": "Added to AniList and linked",
             "anilist_entry": entry,
-            "match_confidence": best_confidence
+            "match_confidence": best_confidence,
         }
 
     except HTTPException:
@@ -816,8 +842,7 @@ async def add_to_anilist(
 
 @router.post("/anilist/add-by-id")
 async def add_to_anilist_by_id(
-    request: AddToAniListByIdRequest,
-    current_user: dict = Depends(get_current_user)
+    request: AddToAniListByIdRequest, current_user: dict = Depends(get_current_user)
 ):
     """Add manga to user's AniList list when the AniList ID is already known."""
     try:
@@ -832,7 +857,8 @@ async def add_to_anilist_by_id(
         entry = await anilist_client.add_manga_to_list(
             token=anilist_token,
             manga_id=request.anilist_id,
-            status=al_status
+            status=al_status,
+            user_id=int(current_user.get("anilist_id")),
         )
 
         return {
@@ -852,16 +878,13 @@ async def get_chapters(
     manhwa_id: str,
     lang: str = Query("en", description="Language code"),
     page: int = Query(1, ge=1),
-    per_page: int = Query(50, ge=1, le=100)
+    per_page: int = Query(50, ge=1, le=100),
 ):
     """Get chapter list for a manga from MangaDex"""
     try:
         offset = (page - 1) * per_page
         result = await mangadex_client.get_chapters(
-            manga_id=manhwa_id,
-            lang=lang,
-            limit=per_page,
-            offset=offset
+            manga_id=manhwa_id, lang=lang, limit=per_page, offset=offset
         )
 
         chapters = []
@@ -874,24 +897,26 @@ async def get_chapters(
                 if rel.get("type") == "scanlation_group":
                     group_name = rel.get("attributes", {}).get("name")
 
-            chapters.append({
-                "id": ch["id"],
-                "chapter": attrs.get("chapter"),
-                "title": attrs.get("title"),
-                "volume": attrs.get("volume"),
-                "pages": attrs.get("pages", 0),
-                "language": attrs.get("translatedLanguage"),
-                "group": group_name,
-                "published_at": attrs.get("publishAt"),
-                "readable_at": attrs.get("readableAt"),
-            })
+            chapters.append(
+                {
+                    "id": ch["id"],
+                    "chapter": attrs.get("chapter"),
+                    "title": attrs.get("title"),
+                    "volume": attrs.get("volume"),
+                    "pages": attrs.get("pages", 0),
+                    "language": attrs.get("translatedLanguage"),
+                    "group": group_name,
+                    "published_at": attrs.get("publishAt"),
+                    "readable_at": attrs.get("readableAt"),
+                }
+            )
 
         return {
             "chapters": chapters,
             "total": result.get("total", 0),
             "page": page,
             "per_page": per_page,
-            "has_next": offset + per_page < result.get("total", 0)
+            "has_next": offset + per_page < result.get("total", 0),
         }
 
     except Exception as e:

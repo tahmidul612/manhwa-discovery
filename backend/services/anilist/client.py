@@ -33,10 +33,7 @@ class AniListClient:
             await self._client.aclose()
 
     async def _graphql_request(
-        self,
-        query: str,
-        variables: Optional[Dict[str, Any]] = None,
-        token: Optional[str] = None
+        self, query: str, variables: Optional[Dict[str, Any]] = None, token: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Make GraphQL request to AniList API
@@ -54,10 +51,7 @@ class AniListClient:
         """
         client = await self._get_client()
 
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        }
+        headers = {"Content-Type": "application/json", "Accept": "application/json"}
 
         if token:
             headers["Authorization"] = f"Bearer {token}"
@@ -67,18 +61,16 @@ class AniListClient:
             payload["variables"] = variables
 
         try:
-            response = await client.post(
-                self.api_url,
-                json=payload,
-                headers=headers
-            )
+            response = await client.post(self.api_url, json=payload, headers=headers)
             response.raise_for_status()
             result = response.json()
 
             # Check for GraphQL errors
             if "errors" in result:
                 logger.error(f"GraphQL errors: {result['errors']}")
-                raise Exception(f"GraphQL error: {result['errors'][0].get('message', 'Unknown error')}")
+                raise Exception(
+                    f"GraphQL error: {result['errors'][0].get('message', 'Unknown error')}"
+                )
 
             return result.get("data", {})
 
@@ -105,7 +97,7 @@ class AniListClient:
             "client_id": self.client_id,
             "redirect_uri": self.redirect_uri,
             "response_type": "code",
-            "state": state
+            "state": state,
         }
         auth_url = f"https://anilist.co/api/v2/oauth/authorize?{urlencode(params)}"
         logger.info(f"Generated OAuth URL with state: {state}")
@@ -131,14 +123,14 @@ class AniListClient:
             "client_id": self.client_id,
             "client_secret": self.client_secret,
             "redirect_uri": self.redirect_uri,
-            "code": code
+            "code": code,
         }
 
         try:
             response = await client.post(
                 "https://anilist.co/api/v2/oauth/token",
                 data=payload,
-                headers={"Content-Type": "application/x-www-form-urlencoded"}
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
             response.raise_for_status()
             token_data = response.json()
@@ -168,14 +160,14 @@ class AniListClient:
             "grant_type": "refresh_token",
             "client_id": self.client_id,
             "client_secret": self.client_secret,
-            "refresh_token": refresh_token
+            "refresh_token": refresh_token,
         }
 
         try:
             response = await client.post(
                 "https://anilist.co/api/v2/oauth/token",
                 data=payload,
-                headers={"Content-Type": "application/x-www-form-urlencoded"}
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
             response.raise_for_status()
             token_data = response.json()
@@ -217,7 +209,7 @@ class AniListClient:
         self,
         user_id: Optional[int] = None,
         token: Optional[str] = None,
-        status: Optional[str] = None
+        status: Optional[str] = None,
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
         Get user's manga list grouped by status
@@ -345,7 +337,7 @@ class AniListClient:
             grouped_lists,
             CacheTTL.USER_LISTS,
             "anilist",
-            user_id=str(user_id) if user_id else None
+            user_id=str(user_id) if user_id else None,
         )
 
         logger.info(f"Fetched manga list for user {user_id or 'me'}")
@@ -467,10 +459,10 @@ class AniListClient:
         # Build cache key from all params
         cache_parts = [
             f"anilist:browse:{page}:{per_page}:{sort}",
-            f"g={','.join(genres or [])}",
-            f"t={','.join(tags or [])}",
+            f"g={','.join(sorted(genres or []))}",
+            f"t={','.join(sorted(tags or []))}",
             f"c={country or ''}",
-            f"f={','.join(format_in or [])}",
+            f"f={','.join(sorted(format_in or []))}",
             f"s={status or ''}",
             f"y={year_greater or ''}-{year_lesser or ''}",
         ]
@@ -520,7 +512,7 @@ class AniListClient:
             variables["startDate_lesser"] = year_lesser * 10000 + 9999
 
         # Build page-level args string - separate page args from media args
-        page_args = f"page: $page, perPage: $perPage"
+        page_args = "page: $page, perPage: $perPage"
         media_filter_args = ", ".join(
             a for a in media_args if a not in ("page: $page", "perPage: $perPage")
         )
@@ -614,18 +606,16 @@ class AniListClient:
         }
         """
 
-        variables = {
-            "search": query,
-            "page": page,
-            "perPage": per_page
-        }
+        variables = {"search": query, "page": page, "perPage": per_page}
 
         result = await self._graphql_request(graphql_query, variables)
 
         # Cache result
         await cache_service.set_cached(cache_key, result, CacheTTL.SEARCH_RESULTS, "anilist")
 
-        logger.info(f"AniList search for '{query}' returned {len(result.get('Page', {}).get('media', []))} results")
+        logger.info(
+            f"AniList search for '{query}' returned {len(result.get('Page', {}).get('media', []))} results"
+        )
         return result
 
     async def get_manga_details(self, manga_id: int) -> Optional[Dict[str, Any]]:
@@ -706,7 +696,9 @@ class AniListClient:
 
             if manga_data:
                 # Cache result
-                await cache_service.set_cached(cache_key, manga_data, CacheTTL.MANGA_DETAILS, "anilist")
+                await cache_service.set_cached(
+                    cache_key, manga_data, CacheTTL.MANGA_DETAILS, "anilist"
+                )
                 logger.info(f"Fetched manga details for ID {manga_id}")
                 return manga_data
 
@@ -722,7 +714,8 @@ class AniListClient:
         manga_id: int,
         status: str = "PLANNING",
         progress: int = 0,
-        score: Optional[float] = None
+        score: Optional[float] = None,
+        user_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Add manga to user's list
@@ -756,24 +749,21 @@ class AniListClient:
         }
         """
 
-        variables = {
-            "mediaId": manga_id,
-            "status": status,
-            "progress": progress
-        }
+        variables = {"mediaId": manga_id, "status": status, "progress": progress}
 
         if score is not None:
             variables["score"] = score
 
         result = await self._graphql_request(mutation, variables, token)
         logger.info(f"Added manga {manga_id} to user's list with status {status}")
+
+        if user_id:
+            await cache_service.invalidate_pattern(f"anilist:user:{user_id}:*", "anilist")
+
         return result.get("SaveMediaListEntry", {})
 
     async def update_manga_in_list(
-        self,
-        token: str,
-        entry_id: int,
-        updates: Dict[str, Any]
+        self, token: str, entry_id: int, updates: Dict[str, Any], user_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Update manga entry in user's list
@@ -818,9 +808,15 @@ class AniListClient:
 
         result = await self._graphql_request(mutation, variables, token)
         logger.info(f"Updated list entry {entry_id}")
+
+        if user_id:
+            await cache_service.invalidate_pattern(f"anilist:user:{user_id}:*", "anilist")
+
         return result.get("SaveMediaListEntry", {})
 
-    async def delete_manga_from_list(self, token: str, entry_id: int) -> bool:
+    async def delete_manga_from_list(
+        self, token: str, entry_id: int, user_id: Optional[int] = None
+    ) -> bool:
         """
         Delete manga from user's list
 
@@ -844,6 +840,10 @@ class AniListClient:
         try:
             result = await self._graphql_request(mutation, variables, token)
             logger.info(f"Deleted list entry {entry_id}")
+
+            if user_id:
+                await cache_service.invalidate_pattern(f"anilist:user:{user_id}:*", "anilist")
+
             return result.get("DeleteMediaListEntry", {}).get("deleted", False)
         except Exception as e:
             logger.error(f"Failed to delete entry {entry_id}: {e}")

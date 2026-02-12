@@ -1,4 +1,5 @@
 # Two-tier caching layer (Redis L1 + MongoDB L2)
+import hashlib
 import json
 import logging
 from typing import Optional, Any, Dict
@@ -25,9 +26,7 @@ class CacheService:
 
         try:
             self._redis = await redis.from_url(
-                settings.REDIS_URL,
-                encoding="utf-8",
-                decode_responses=True
+                settings.REDIS_URL, encoding="utf-8", decode_responses=True
             )
             await self._redis.ping()
             self._connected = True
@@ -42,7 +41,9 @@ class CacheService:
             await self._redis.close()
             logger.info("Redis connection closed")
 
-    async def get_with_fallback(self, key: str, cache_type: str = "mangadex") -> Optional[Dict[str, Any]]:
+    async def get_with_fallback(
+        self, key: str, cache_type: str = "mangadex"
+    ) -> Optional[Dict[str, Any]]:
         """
         Get cached value with L1 (Redis) -> L2 (MongoDB) fallback
 
@@ -79,7 +80,9 @@ class CacheService:
                     # Repopulate Redis if available
                     if self._connected and self._redis and data:
                         try:
-                            ttl_seconds = int((cached_doc["expires_at"] - datetime.utcnow()).total_seconds())
+                            ttl_seconds = int(
+                                (cached_doc["expires_at"] - datetime.utcnow()).total_seconds()
+                            )
                             if ttl_seconds > 0:
                                 await self._redis.setex(key, ttl_seconds, json.dumps(data))
                         except Exception as e:
@@ -101,7 +104,7 @@ class CacheService:
         value: Dict[str, Any],
         ttl: int,
         cache_type: str = "mangadex",
-        user_id: Optional[str] = None
+        user_id: Optional[str] = None,
     ):
         """
         Set cached value in both L1 (Redis) and L2 (MongoDB)
@@ -134,17 +137,13 @@ class CacheService:
                 "_id": key,
                 "data": value,
                 "expires_at": datetime.utcnow() + timedelta(seconds=ttl),
-                "created_at": datetime.utcnow()
+                "created_at": datetime.utcnow(),
             }
 
             if user_id:
                 cache_doc["user_id"] = user_id
 
-            await collection.update_one(
-                {"_id": key},
-                {"$set": cache_doc},
-                upsert=True
-            )
+            await collection.update_one({"_id": key}, {"$set": cache_doc}, upsert=True)
             logger.debug(f"Cached to MongoDB: {key} (TTL: {ttl}s)")
         except Exception as e:
             logger.error(f"MongoDB cache set failed for key {key}: {e}")
@@ -221,6 +220,11 @@ class CacheService:
 
 # Global cache service instance
 cache_service = CacheService()
+
+
+def deterministic_hash(value: str) -> str:
+    """Create a deterministic short hash for use in cache keys."""
+    return hashlib.md5(value.encode()).hexdigest()[:12]
 
 
 # Cache TTL constants (in seconds)

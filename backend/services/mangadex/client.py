@@ -2,12 +2,12 @@
 # API Docs: https://api.mangadex.org/docs/
 
 import asyncio
+import json
 import logging
 from typing import Optional, List, Dict, Any
-from datetime import datetime
 import httpx
 from backend.config.settings import settings
-from backend.database.cache import cache_service, CacheTTL
+from backend.database.cache import cache_service, CacheTTL, deterministic_hash
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +44,7 @@ class MangaDexClient:
         """Get or create HTTP client"""
         if self._client is None:
             self._client = httpx.AsyncClient(
-                base_url=self.api_url,
-                timeout=30.0,
-                headers={"User-Agent": "ManhwaDiscovery/1.0"}
+                base_url=self.api_url, timeout=30.0, headers={"User-Agent": "ManhwaDiscovery/1.0"}
             )
         return self._client
 
@@ -56,11 +54,7 @@ class MangaDexClient:
             await self._client.aclose()
 
     async def _request_with_retry(
-        self,
-        method: str,
-        endpoint: str,
-        params: Optional[Dict] = None,
-        max_retries: int = 3
+        self, method: str, endpoint: str, params: Optional[Dict] = None, max_retries: int = 3
     ) -> Dict[str, Any]:
         """
         Make HTTP request with exponential backoff retry
@@ -89,13 +83,15 @@ class MangaDexClient:
 
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429:  # Rate limited
-                    wait_time = 2 ** attempt
+                    wait_time = 2**attempt
                     logger.warning(f"Rate limited, waiting {wait_time}s before retry")
                     await asyncio.sleep(wait_time)
                 elif e.response.status_code >= 500:  # Server error
                     if attempt < max_retries - 1:
-                        wait_time = 2 ** attempt
-                        logger.warning(f"Server error {e.response.status_code}, retrying in {wait_time}s")
+                        wait_time = 2**attempt
+                        logger.warning(
+                            f"Server error {e.response.status_code}, retrying in {wait_time}s"
+                        )
                         await asyncio.sleep(wait_time)
                     else:
                         raise
@@ -104,7 +100,7 @@ class MangaDexClient:
 
             except (httpx.RequestError, httpx.TimeoutException) as e:
                 if attempt < max_retries - 1:
-                    wait_time = 2 ** attempt
+                    wait_time = 2**attempt
                     logger.warning(f"Request error: {e}, retrying in {wait_time}s")
                     await asyncio.sleep(wait_time)
                 else:
@@ -113,11 +109,7 @@ class MangaDexClient:
         raise httpx.HTTPError(f"Max retries ({max_retries}) exceeded for {endpoint}")
 
     async def search_manga(
-        self,
-        query: str,
-        limit: int = 20,
-        offset: int = 0,
-        filters: Optional[Dict[str, Any]] = None
+        self, query: str, limit: int = 20, offset: int = 0, filters: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Search for manga/manhwa
@@ -131,7 +123,7 @@ class MangaDexClient:
         Returns:
             Search results with manga data
         """
-        cache_key = f"mangadex:search:{query}:{limit}:{offset}:{hash(str(filters))}"
+        cache_key = f"mangadex:search:{query}:{limit}:{offset}:{deterministic_hash(json.dumps(filters, sort_keys=True, default=str))}"
         cached = await cache_service.get_with_fallback(cache_key, "mangadex")
         if cached:
             return cached
@@ -142,7 +134,7 @@ class MangaDexClient:
             "offset": offset,
             "includes[]": ["cover_art", "author", "artist"],
             "contentRating[]": ["safe", "suggestive", "erotica"],
-            "order[relevance]": "desc"
+            "order[relevance]": "desc",
         }
 
         if filters:
@@ -167,7 +159,9 @@ class MangaDexClient:
         try:
             result = await self._request_with_retry("GET", "/manga", params=params)
             await cache_service.set_cached(cache_key, result, CacheTTL.SEARCH_RESULTS, "mangadex")
-            logger.info(f"MangaDex search: '{query}' returned {len(result.get('data', []))} results")
+            logger.info(
+                f"MangaDex search: '{query}' returned {len(result.get('data', []))} results"
+            )
             return result
         except Exception as e:
             logger.error(f"MangaDex search failed for query '{query}': {e}")
@@ -193,7 +187,9 @@ class MangaDexClient:
             result = await self._request_with_retry("GET", f"/manga/{manga_id}", params=params)
 
             if result.get("data"):
-                await cache_service.set_cached(cache_key, result, CacheTTL.MANGA_DETAILS, "mangadex")
+                await cache_service.set_cached(
+                    cache_key, result, CacheTTL.MANGA_DETAILS, "mangadex"
+                )
                 logger.info(f"Fetched manga details for {manga_id}")
                 return result
 
@@ -229,18 +225,16 @@ class MangaDexClient:
                     covers.append(cover_url)
 
             cache_data = {"covers": covers}
-            await cache_service.set_cached(cache_key, cache_data, CacheTTL.MANGA_DETAILS, "mangadex")
+            await cache_service.set_cached(
+                cache_key, cache_data, CacheTTL.MANGA_DETAILS, "mangadex"
+            )
             return covers
         except Exception as e:
             logger.error(f"Failed to fetch covers for {manga_id}: {e}")
             return []
 
     async def get_chapters(
-        self,
-        manga_id: str,
-        lang: str = "en",
-        limit: int = 100,
-        offset: int = 0
+        self, manga_id: str, lang: str = "en", limit: int = 100, offset: int = 0
     ) -> Dict[str, Any]:
         """
         Get chapters for a manga
@@ -266,7 +260,7 @@ class MangaDexClient:
                 "limit": limit,
                 "offset": offset,
                 "order[chapter]": "desc",
-                "includes[]": ["scanlation_group"]
+                "includes[]": ["scanlation_group"],
             }
             result = await self._request_with_retry("GET", "/chapter", params=params)
             await cache_service.set_cached(cache_key, result, CacheTTL.MANGA_DETAILS, "mangadex")
@@ -285,7 +279,7 @@ class MangaDexClient:
         Returns:
             Dictionary mapping manga_id to statistics
         """
-        cache_key = f"mangadex:stats:{hash(tuple(sorted(manga_ids)))}"
+        cache_key = f"mangadex:stats:{deterministic_hash(','.join(sorted(manga_ids)))}"
         cached = await cache_service.get_with_fallback(cache_key, "mangadex")
         if cached:
             return cached
@@ -373,7 +367,7 @@ class MangaDexClient:
                     "manga": manga_id,
                     "translatedLanguage[]": "en",
                     "limit": 1,
-                    "order[chapter]": "desc"
+                    "order[chapter]": "desc",
                 }
                 result = await self._request_with_retry("GET", "/chapter", params=params)
 
