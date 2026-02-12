@@ -1,0 +1,25 @@
+# Production overrides - use with: docker compose -f docker-compose.yml -f docker-compose.prod.yml up
+services:
+  backend:
+    build:
+      target: prod
+    volumes: []
+    environment:
+      - DEBUG=false
+      - MONGODB_URL=mongodb://mongo:27017
+      - REDIS_URL=redis://redis:6379
+    restart: always
+
+  frontend:
+    build:
+      target: prod
+    ports:
+      - "80:80"
+    volumes: []
+    restart: always
+
+  mongo:
+    restart: always
+
+  redis:
+    restart: always
