@@ -1,6 +1,6 @@
 [project]
 name = "manhwa-discovery"
-version = "0.1.1"
+version = "0.1.2"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -40,7 +40,7 @@ dev = [
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.1.1"
+version = "0.1.2"
 version_scheme = "pep440"
 version_provider = "pep621"
 update_changelog_on_bump = true

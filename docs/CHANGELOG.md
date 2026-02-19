@@ -28,6 +28,12 @@ Given a version number MAJOR.MINOR.PATCH:
 [Unreleased]: https://github.com/tahmidul612/manhwa-discovery/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/tahmidul612/manhwa-discovery/releases/tag/v0.1.0
 
+## v0.1.2 (2026-02-19)
+
+### Fix
+
+- add --frozen to uv run to prevent lock file write on read-only mount
+
 ## v0.1.1 (2026-02-19)
 
 ### Perf
