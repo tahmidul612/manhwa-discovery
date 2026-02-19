@@ -141,6 +141,8 @@ export default function LinkManagementModal({ isOpen, onClose, manhwa, mode = 'l
                       src={result.cover_url}
                       alt=""
                       className="w-10 h-14 object-cover rounded-lg flex-shrink-0"
+                      loading="lazy"
+                      onError={(e) => { e.target.onerror = null; e.target.src = '/placeholder.png'; }}
                     />
                   )}
                   <div className="min-w-0 flex-1">

@@ -423,3 +423,4 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/fish,linux,macos,python,windows,visualstudiocode,node,react
+frontend/.vite/

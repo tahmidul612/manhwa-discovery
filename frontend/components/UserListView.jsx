@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { VirtuosoGrid } from 'react-virtuoso';
 import { RefreshCw, Link2, SlidersHorizontal, ArrowUpDown } from 'lucide-react';
 import { apiClient } from '../services/api';
 import ManhwaCard from './ManhwaCard';
@@ -465,6 +466,40 @@ export default function UserListView({ userId, onStatsLoaded }) {
         <div className="text-center py-16 text-text-secondary">
           <p>No entries found{activeTab !== 'all' ? ` in ${activeTab}` : ''}.</p>
         </div>
+      ) : displayList.length > 50 ? (
+        <VirtuosoGrid
+          totalCount={displayList.length}
+          overscan={200}
+          listClassName="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
+          itemContent={(index) => {
+            const entry = displayList[index];
+            const media = entry.media || {};
+            const manhwa = {
+              id: media.id,
+              title: media.title?.english || media.title?.romaji || media.title?.native || 'Unknown',
+              cover_url: entry.mangadex_data?.cover_url || `/api/images/cover/anilist/${media.id}`,
+              rating: media.averageScore ? media.averageScore / 10 : null,
+              chapters_count: entry.mangadex_data?.chapters_count || media.chapters,
+              year: media.startDate?.year,
+              source: 'anilist',
+              user_status: entry.status,
+              user_progress: entry.progress,
+              user_score: entry.score,
+            };
+            const isCurrentlyLinking = linkingEntryId === String(media.id);
+            return (
+              <ManhwaCard
+                manhwa={manhwa}
+                isLinked={entry.is_linked}
+                isAutoLinking={isCurrentlyLinking}
+                connectionId={entry.connection?._id}
+                onLink={(m) => setLinkModal({ open: true, manhwa: m, mode: 'link' })}
+                onFixLink={(m) => setLinkModal({ open: true, manhwa: m, mode: 'relink' })}
+                onUnlink={(connId) => unlinkMutation.mutate(connId)}
+              />
+            );
+          }}
+        />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {displayList.map((entry) => {
@@ -472,7 +507,7 @@ export default function UserListView({ userId, onStatsLoaded }) {
             const manhwa = {
               id: media.id,
               title: media.title?.english || media.title?.romaji || media.title?.native || 'Unknown',
-              cover_url: entry.mangadex_data?.cover_url || media.coverImage?.large,
+              cover_url: entry.mangadex_data?.cover_url || `/api/images/cover/anilist/${media.id}`,
               rating: media.averageScore ? media.averageScore / 10 : null,
               chapters_count: entry.mangadex_data?.chapters_count || media.chapters,
               year: media.startDate?.year,

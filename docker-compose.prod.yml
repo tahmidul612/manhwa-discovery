@@ -3,7 +3,8 @@ services:
   backend:
     build:
       target: prod
-    volumes: []
+    volumes:
+      - cover_cache:/tmp/manhwa-covers
     environment:
       - DEBUG=false
       - MONGODB_URL=mongodb://mongo:27017
@@ -13,8 +14,10 @@ services:
   frontend:
     build:
       target: prod
+      args:
+        - VITE_API_URL=/api
     ports:
-      - "80:80"
+      - "3090:80"
     volumes: []
     restart: always
 

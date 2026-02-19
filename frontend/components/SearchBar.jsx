@@ -97,7 +97,13 @@ export default function SearchBar({ onSearch, filters, onFilterChange }) {
                     className="w-full flex items-center gap-3 px-4 py-3 hover:bg-glass-highlight transition-colors text-left"
                   >
                     {item.cover_url && (
-                      <img src={item.cover_url} alt="" className="w-8 h-11 object-cover rounded" />
+                      <img
+                        src={item.cover_url}
+                        alt=""
+                        className="w-8 h-11 object-cover rounded"
+                        loading="lazy"
+                        onError={(e) => { e.target.onerror = null; e.target.src = '/placeholder.png'; }}
+                      />
                     )}
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{item.title}</p>

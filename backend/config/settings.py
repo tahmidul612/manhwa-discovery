@@ -2,6 +2,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
+
 class Settings(BaseSettings):
     """Application settings"""
 
@@ -33,11 +34,15 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_HOURS: int = 24
 
+    # Frontend URL for OAuth redirects
+    FRONTEND_URL: str = "http://localhost:3009"
+
     # Rate Limiting
     RATE_LIMIT_ENABLED: bool = True
     MAX_REQUESTS_PER_MINUTE: int = 60
     MANGADEX_RATE_LIMIT: int = 5  # requests per second
 
     model_config = SettingsConfigDict(env_file=".env")
+
 
 settings = Settings()

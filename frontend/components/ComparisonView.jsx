@@ -46,6 +46,8 @@ export default function ComparisonView({ anilistData, mangadexData, confidence }
                     src={anilistData.cover_image}
                     alt="AniList cover"
                     className="w-20 h-28 object-cover rounded-lg"
+                    loading="lazy"
+                    onError={(e) => { e.target.onerror = null; e.target.src = '/placeholder.png'; }}
                   />
                 )}
                 <div className="space-y-1.5 min-w-0">
@@ -96,6 +98,8 @@ export default function ComparisonView({ anilistData, mangadexData, confidence }
                     src={mangadexData.cover_url}
                     alt="MangaDex cover"
                     className="w-20 h-28 object-cover rounded-lg"
+                    loading="lazy"
+                    onError={(e) => { e.target.onerror = null; e.target.src = '/placeholder.png'; }}
                   />
                 )}
                 <div className="space-y-1.5 min-w-0">

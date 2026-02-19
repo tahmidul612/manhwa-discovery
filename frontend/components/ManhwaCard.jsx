@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Star, BookOpen, Link2, LinkIcon, Unlink, Wrench, Loader2, Plus } from 'lucide-react';
+import { apiClient } from '../services/api';
 
 const STATUS_BADGES = {
   READING: 'badge-reading',
@@ -21,6 +23,7 @@ export default function ManhwaCard({ manhwa, onHover, onLink, onUnlink, onFixLin
   const [imgLoaded, setImgLoaded] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const rating = manhwa.rating ? manhwa.rating.toFixed(1) : null;
   const chapters = manhwa.chapters_count || manhwa.chapters;
@@ -30,13 +33,22 @@ export default function ManhwaCard({ manhwa, onHover, onLink, onUnlink, onFixLin
 
   const hasProgress = userProgress != null && userProgress > 0;
 
+  const handleHover = useCallback(() => {
+    onHover?.(manhwa.id);
+    queryClient.prefetchQuery({
+      queryKey: ['manhwa', String(manhwa.id), manhwa.source || 'mangadex'],
+      queryFn: () => apiClient.getManhwaDetails(manhwa.id, manhwa.source || 'mangadex'),
+      staleTime: 5 * 60 * 1000,
+    });
+  }, [manhwa.id, manhwa.source, onHover, queryClient]);
+
   return (
     <motion.div
       className="group relative rounded-2xl glass glass-hover overflow-hidden transition-all duration-300 cursor-pointer"
       whileHover={{ y: -4 }}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      onHoverStart={() => onHover?.(manhwa.id)}
+      onHoverStart={handleHover}
       onClick={() => navigate(`/manhwa/${manhwa.id}?source=${manhwa.source || 'mangadex'}`)}
       role="article"
       aria-label={`${manhwa.title} manga card`}
@@ -51,6 +63,7 @@ export default function ManhwaCard({ manhwa, onHover, onLink, onUnlink, onFixLin
           alt={`Cover of ${manhwa.title}`}
           className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
           onLoad={() => setImgLoaded(true)}
+          onError={(e) => { e.target.onerror = null; e.target.src = '/placeholder.png'; setImgLoaded(true); }}
           loading="lazy"
         />
         {/* Gradient overlay */}
