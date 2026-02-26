@@ -1,6 +1,6 @@
 // API client for backend communication
 import axios from 'axios';
-
+import { useAuthStore } from '../stores/useAuthStore';
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8009',
   timeout: 30090,
@@ -20,8 +20,10 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      // Clear both localStorage and Zustand store
       localStorage.removeItem('auth_token');
-      // Could redirect to login here
+      const { logout } = useAuthStore.getState();
+      logout();
     }
     return Promise.reject(error);
   }
