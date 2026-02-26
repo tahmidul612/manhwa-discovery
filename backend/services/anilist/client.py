@@ -325,7 +325,17 @@ class AniListClient:
         }
 
         # Parse and group by status
-        grouped_lists = {}
+        # Initialize with all possible statuses as empty lists
+        grouped_lists = {
+            "reading": [],
+            "completed": [],
+            "paused": [],
+            "dropped": [],
+            "planning": [],
+            "repeating": [],
+        }
+
+        # Populate with actual data from AniList
         for list_data in result.get("MediaListCollection", {}).get("lists", []):
             raw_status = list_data.get("status", list_data.get("name", "unknown"))
             list_status = ANILIST_STATUS_MAP.get(raw_status, raw_status.lower())
@@ -340,7 +350,9 @@ class AniListClient:
             user_id=str(user_id) if user_id else None,
         )
 
-        logger.info(f"Fetched manga list for user {user_id or 'me'}")
+        logger.info(
+            f"Fetched manga list for user {user_id or 'me'}: {sum(len(v) for v in grouped_lists.values())} total entries"
+        )
         return grouped_lists
 
     async def get_trending_manga(self, page: int = 1, per_page: int = 20) -> Dict[str, Any]:
