@@ -5,6 +5,7 @@ import { apiClient } from '../services/api';
 import ManhwaCard from './ManhwaCard';
 import LinkManagementModal from './LinkManagementModal';
 import { SkeletonGrid } from './SkeletonCard';
+import Alert from './Alert';
 
 const STATUS_TABS = [
   { key: 'all', label: 'All' },
@@ -280,6 +281,14 @@ export default function UserListView({ userId, onStatsLoaded }) {
         </div>
       </div>
 
+      {/* Warning message if serving stale data */}
+      {data?.warning && (
+        <Alert
+          variant="warning"
+          message={data.warning}
+          dismissible={true}
+        />
+      )}
       {/* Sync result message */}
       {syncMutation.isSuccess && (
         <div className="rounded-xl glass p-3 text-sm text-green-400 border border-green-400/20">
