@@ -14,6 +14,10 @@ export default defineConfig({
         target: 'http://localhost:8009',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
+      },
+      '/images': {
+        target: 'http://localhost:8009',
+        changeOrigin: true
       }
     }
   },
