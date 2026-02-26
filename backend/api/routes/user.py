@@ -46,7 +46,8 @@ def _extract_alt_titles(mangadex_data: dict) -> list[str]:
 async def get_user_lists(
     user_id: str,
     status: Optional[str] = Query(
-        None, description="Filter by status: READING, COMPLETED, PAUSED, DROPPED, PLANNING"
+        None,
+        description="Filter by status: READING, COMPLETED, PAUSED, DROPPED, PLANNING",
     ),
     current_user: dict = Depends(get_current_user),
 ):
@@ -74,9 +75,43 @@ async def get_user_lists(
         # Fetch manga list from AniList
         anilist_token = current_user.get("anilist_token")
         anilist_status = STATUS_TO_ANILIST.get(status.upper(), status) if status else None
-        lists = await anilist_client.get_user_manga_list(
-            user_id=int(anilist_id), token=anilist_token, status=anilist_status
-        )
+
+        # Build cache key for fallback
+        cache_key = f"anilist:user:{anilist_id}:list:{anilist_status or 'all'}"
+        warning_message = None
+
+        try:
+            lists = await anilist_client.get_user_manga_list(
+                user_id=int(anilist_id), token=anilist_token, status=anilist_status
+            )
+        except Exception as api_error:
+            # Log the API error
+            logger.error(f"AniList API error: {api_error}")
+
+            # Try to serve stale cached data
+            lists = await cache_service.get_stale(cache_key, "anilist")
+
+            if lists:
+                # Determine error type for user-friendly message
+                error_str = str(api_error).lower()
+                if "429" in error_str or "rate limit" in error_str:
+                    warning_message = (
+                        "AniList API rate limit reached. Showing cached data (may be outdated)."
+                    )
+                elif "timeout" in error_str:
+                    warning_message = "AniList API timeout. Showing cached data (may be outdated)."
+                elif "503" in error_str or "502" in error_str:
+                    warning_message = "AniList API is temporarily unavailable. Showing cached data (may be outdated)."
+                else:
+                    warning_message = "Failed to fetch latest data from AniList. Showing cached data (may be outdated)."
+
+                logger.warning(f"Serving stale cache due to API error: {warning_message}")
+            else:
+                # No cache available, re-raise the error
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"AniList API error and no cached data available: {api_error}",
+                )
 
         # Enrich with MangaDex data from existing connections
         db = get_db()
@@ -147,12 +182,18 @@ async def get_user_lists(
         status_counts = {k: len(v) for k, v in enriched_lists.items()}
         logger.info(f"Returning user lists: {status_counts}")
 
-        return {
+        response_data = {
             "lists": enriched_lists,
             "total_entries": total_entries,
             "total_linked": total_linked,
             "user_id": user_id,
         }
+
+        # Add warning if serving stale data
+        if warning_message:
+            response_data["warning"] = warning_message
+
+        return response_data
 
     except HTTPException:
         raise
@@ -205,7 +246,9 @@ class AutoLinkEntryRequest(BaseModel):
 
 @router.post("/{user_id}/auto-link-entry")
 async def auto_link_entry(
-    user_id: str, request: AutoLinkEntryRequest, current_user: dict = Depends(get_current_user)
+    user_id: str,
+    request: AutoLinkEntryRequest,
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Auto-match a single AniList entry to MangaDex (0.70 confidence).
