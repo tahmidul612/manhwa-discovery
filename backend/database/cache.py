@@ -98,6 +98,34 @@ class CacheService:
         logger.debug(f"Cache miss: {key}")
         return None
 
+    async def get_stale(self, key: str, cache_type: str = "mangadex") -> Optional[Dict[str, Any]]:
+        """
+        Get cached value even if expired (for fallback on API errors)
+
+        Args:
+            key: Cache key
+            cache_type: Cache collection type ('mangadex' or 'anilist')
+
+        Returns:
+            Cached data if found (even if expired), None otherwise
+        """
+        # Try MongoDB even for expired data
+        try:
+            db = get_db()
+            collection_name = f"{cache_type}_cache"
+            collection = db[collection_name]
+
+            cached_doc = await collection.find_one({"_id": key})
+            if cached_doc:
+                logger.info(
+                    f"Serving stale cache: {key} (expired at {cached_doc.get('expires_at')})"
+                )
+                return cached_doc.get("data")
+        except Exception as e:
+            logger.error(f"Failed to get stale cache for key {key}: {e}")
+
+        return None
+
     async def set_cached(
         self,
         key: str,
