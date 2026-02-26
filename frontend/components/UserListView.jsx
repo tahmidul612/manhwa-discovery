@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { VirtuosoGrid } from 'react-virtuoso';
 import { RefreshCw, Link2, SlidersHorizontal, ArrowUpDown } from 'lucide-react';
 import { apiClient } from '../services/api';
 import ManhwaCard from './ManhwaCard';
@@ -84,10 +83,11 @@ export default function UserListView({ userId, onStatsLoaded }) {
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['userLists', userId, activeTab === 'all' ? null : activeTab],
-    queryFn: () => apiClient.getUserLists(userId, activeTab === 'all' ? null : activeTab),
+    queryKey: ['userLists', userId],  // Single cache key - fetch all statuses once
+    queryFn: () => apiClient.getUserLists(userId, null),  // Always fetch all statuses
     enabled: !!userId,
     select: (res) => res.data,
+    staleTime: 2 * 60 * 1000, // 2 minutes - balance freshness and API calls
   });
 
   const syncMutation = useMutation({
@@ -116,10 +116,15 @@ export default function UserListView({ userId, onStatsLoaded }) {
 
   const lists = data?.lists || {};
 
-  // Flatten entries for display based on active tab
-  const rawList = activeTab === 'all'
-    ? Object.values(lists).flat()
-    : lists[activeTab.toLowerCase()] || [];
+  // Flatten entries for display based on active tab (filter locally from cached data)
+  const rawList = useMemo(() => {
+    if (activeTab === 'all') {
+      return Object.values(lists).flat();
+    }
+    // Filter by status locally - backend returns lowercase keys
+    const statusKey = activeTab.toLowerCase();
+    return lists[statusKey] || [];
+  }, [lists, activeTab]);
 
   // Apply filters and sorting
   const displayList = useMemo(() => {
@@ -184,12 +189,15 @@ export default function UserListView({ userId, onStatsLoaded }) {
     return filtered;
   }, [rawList, filters, sortBy]);
 
-  // Count entries per status
-  const statusCounts = {};
-  for (const [status, entries] of Object.entries(lists)) {
-    statusCounts[status.toUpperCase()] = entries.length;
-  }
-  const totalCount = Object.values(lists).reduce((sum, entries) => sum + entries.length, 0);
+  // Count entries per status (memoized to prevent recalculation on every render)
+  const { statusCounts, totalCount } = useMemo(() => {
+    const counts = {};
+    for (const [status, entries] of Object.entries(lists)) {
+      counts[status.toUpperCase()] = entries.length;
+    }
+    const total = Object.values(lists).reduce((sum, entries) => sum + entries.length, 0);
+    return { statusCounts: counts, totalCount: total };
+  }, [lists]);
 
   // Auto-link all unlinked entries one by one
   const handleAutoLinkAll = useCallback(async () => {
@@ -229,6 +237,9 @@ export default function UserListView({ userId, onStatsLoaded }) {
     return (
       <div className="text-center py-12">
         <p className="text-text-secondary">Failed to load manga list.</p>
+        {error?.response?.data?.detail && (
+          <p className="text-xs text-text-tertiary mt-2">{error.response.data.detail}</p>
+        )}
         <button
           onClick={() => queryClient.invalidateQueries({ queryKey: ['userLists'] })}
           className="mt-4 px-4 py-2 rounded-xl glass glass-hover text-sm"
@@ -464,42 +475,18 @@ export default function UserListView({ userId, onStatsLoaded }) {
         <SkeletonGrid count={10} />
       ) : displayList.length === 0 ? (
         <div className="text-center py-16 text-text-secondary">
-          <p>No entries found{activeTab !== 'all' ? ` in ${activeTab}` : ''}.</p>
+          {activeTab === 'all' ? (
+            <>
+              <p>Your manga list is empty.</p>
+              <p className="text-sm mt-2">Add manga from the search page to get started!</p>
+            </>
+          ) : (
+            <>
+              <p>No manga in {STATUS_TABS.find(t => t.key === activeTab)?.label || activeTab}.</p>
+              <p className="text-sm mt-2">Entries with this status will appear here.</p>
+            </>
+          )}
         </div>
-      ) : displayList.length > 50 ? (
-        <VirtuosoGrid
-          totalCount={displayList.length}
-          overscan={200}
-          listClassName="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
-          itemContent={(index) => {
-            const entry = displayList[index];
-            const media = entry.media || {};
-            const manhwa = {
-              id: media.id,
-              title: media.title?.english || media.title?.romaji || media.title?.native || 'Unknown',
-              cover_url: entry.mangadex_data?.cover_url || `/api/images/cover/anilist/${media.id}`,
-              rating: media.averageScore ? media.averageScore / 10 : null,
-              chapters_count: entry.mangadex_data?.chapters_count || media.chapters,
-              year: media.startDate?.year,
-              source: 'anilist',
-              user_status: entry.status,
-              user_progress: entry.progress,
-              user_score: entry.score,
-            };
-            const isCurrentlyLinking = linkingEntryId === String(media.id);
-            return (
-              <ManhwaCard
-                manhwa={manhwa}
-                isLinked={entry.is_linked}
-                isAutoLinking={isCurrentlyLinking}
-                connectionId={entry.connection?._id}
-                onLink={(m) => setLinkModal({ open: true, manhwa: m, mode: 'link' })}
-                onFixLink={(m) => setLinkModal({ open: true, manhwa: m, mode: 'relink' })}
-                onUnlink={(connId) => unlinkMutation.mutate(connId)}
-              />
-            );
-          }}
-        />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {displayList.map((entry) => {
