@@ -28,6 +28,25 @@ Given a version number MAJOR.MINOR.PATCH:
 [Unreleased]: https://github.com/tahmidul612/manhwa-discovery/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/tahmidul612/manhwa-discovery/releases/tag/v0.1.0
 
+## v0.2.0 (2026-02-27)
+
+### Feat
+
+- **ui**: redesign manga detail page with improved layout
+- **ui**: add Alert component and integrate error warnings
+- **cache**: add stale cache retrieval for graceful degradation
+- add placeholder image for missing manga covers
+
+### Fix
+
+- **api**: fix cover image URLs and add error handling with stale cache
+- always return all manga list status keys even when empty
+- synchronize auth state on 401 errors
+
+### Perf
+
+- optimize profile page with single API call and local filtering
+
 ## v0.1.2 (2026-02-19)
 
 ### Fix

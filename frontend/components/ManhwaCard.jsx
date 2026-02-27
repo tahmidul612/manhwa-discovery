@@ -101,7 +101,7 @@ export default function ManhwaCard({ manhwa, onHover, onLink, onUnlink, onFixLin
               </span>
             )}
             {isLinked && (
-              <span className="flex items-center gap-0.5 text-[10px] text-accent-primary font-medium">
+              <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-accent-primary/80 text-white border border-accent-primary/60">
                 <Link2 className="w-2.5 h-2.5" />
                 Linked
               </span>

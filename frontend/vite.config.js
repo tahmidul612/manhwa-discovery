@@ -3,7 +3,8 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  root: '.',
+  root: './',
+  publicDir: 'public',
   server: {
     port: 3009,
     host: '0.0.0.0',
@@ -13,6 +14,10 @@ export default defineConfig({
         target: 'http://localhost:8009',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
+      },
+      '/images': {
+        target: 'http://localhost:8009',
+        changeOrigin: true
       }
     }
   },

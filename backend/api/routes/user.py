@@ -2,7 +2,7 @@
 import logging
 from typing import Optional
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends, Query
 from pydantic import BaseModel
 from bson import ObjectId
 from backend.api.middleware.auth import get_current_user
@@ -19,8 +19,7 @@ router = APIRouter()
 
 def _verify_user_access(current_user: dict, user_id: str) -> None:
     """Verify that user_id matches the current user's _id or anilist_id."""
-    if (current_user["_id"] != user_id
-            and str(current_user.get("anilist_id", "")) != str(user_id)):
+    if current_user["_id"] != user_id and str(current_user.get("anilist_id", "")) != str(user_id):
         raise HTTPException(status_code=403, detail="Access denied")
 
 
@@ -46,8 +45,11 @@ def _extract_alt_titles(mangadex_data: dict) -> list[str]:
 @router.get("/{user_id}/lists")
 async def get_user_lists(
     user_id: str,
-    status: Optional[str] = Query(None, description="Filter by status: READING, COMPLETED, PAUSED, DROPPED, PLANNING"),
-    current_user: dict = Depends(get_current_user)
+    status: Optional[str] = Query(
+        None,
+        description="Filter by status: READING, COMPLETED, PAUSED, DROPPED, PLANNING",
+    ),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Get user's AniList manga lists grouped by status,
@@ -73,11 +75,43 @@ async def get_user_lists(
         # Fetch manga list from AniList
         anilist_token = current_user.get("anilist_token")
         anilist_status = STATUS_TO_ANILIST.get(status.upper(), status) if status else None
-        lists = await anilist_client.get_user_manga_list(
-            user_id=int(anilist_id),
-            token=anilist_token,
-            status=anilist_status
-        )
+
+        # Build cache key for fallback
+        cache_key = f"anilist:user:{anilist_id}:list:{anilist_status or 'all'}"
+        warning_message = None
+
+        try:
+            lists = await anilist_client.get_user_manga_list(
+                user_id=int(anilist_id), token=anilist_token, status=anilist_status
+            )
+        except Exception as api_error:
+            # Log the API error
+            logger.error(f"AniList API error: {api_error}")
+
+            # Try to serve stale cached data
+            lists = await cache_service.get_stale(cache_key, "anilist")
+
+            if lists:
+                # Determine error type for user-friendly message
+                error_str = str(api_error).lower()
+                if "429" in error_str or "rate limit" in error_str:
+                    warning_message = (
+                        "AniList API rate limit reached. Showing cached data (may be outdated)."
+                    )
+                elif "timeout" in error_str:
+                    warning_message = "AniList API timeout. Showing cached data (may be outdated)."
+                elif "503" in error_str or "502" in error_str:
+                    warning_message = "AniList API is temporarily unavailable. Showing cached data (may be outdated)."
+                else:
+                    warning_message = "Failed to fetch latest data from AniList. Showing cached data (may be outdated)."
+
+                logger.warning(f"Serving stale cache due to API error: {warning_message}")
+            else:
+                # No cache available, re-raise the error
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"AniList API error and no cached data available: {api_error}",
+                )
 
         # Enrich with MangaDex data from existing connections
         db = get_db()
@@ -86,9 +120,7 @@ async def get_user_lists(
         ).to_list(length=None)
 
         # Build lookup by AniList ID
-        connection_map = {
-            str(c.get("anilist_id")): c for c in connections
-        }
+        connection_map = {str(c.get("anilist_id")): c for c in connections}
 
         # Enrich each list entry
         enriched_lists = {}
@@ -101,7 +133,7 @@ async def get_user_lists(
                     **entry,
                     "connection": None,
                     "mangadex_data": None,
-                    "is_linked": False
+                    "is_linked": False,
                 }
 
                 conn = connection_map.get(media_id)
@@ -132,23 +164,36 @@ async def get_user_lists(
                 for entries in enriched_lists.values():
                     for e in entries:
                         md = e.get("mangadex_data")
-                        if md and md.get("id") in chapter_counts and chapter_counts[md["id"]] is not None:
+                        if (
+                            md
+                            and md.get("id") in chapter_counts
+                            and chapter_counts[md["id"]] is not None
+                        ):
                             md["chapters_count"] = chapter_counts[md["id"]]
             except Exception:
                 pass  # Don't block the response for chapter counts
 
         total_entries = sum(len(v) for v in enriched_lists.values())
         total_linked = sum(
-            1 for entries in enriched_lists.values()
-            for e in entries if e["is_linked"]
+            1 for entries in enriched_lists.values() for e in entries if e["is_linked"]
         )
 
-        return {
+        # Debug logging
+        status_counts = {k: len(v) for k, v in enriched_lists.items()}
+        logger.info(f"Returning user lists: {status_counts}")
+
+        response_data = {
             "lists": enriched_lists,
             "total_entries": total_entries,
             "total_linked": total_linked,
-            "user_id": user_id
+            "user_id": user_id,
         }
+
+        # Add warning if serving stale data
+        if warning_message:
+            response_data["warning"] = warning_message
+
+        return response_data
 
     except HTTPException:
         raise
@@ -158,10 +203,7 @@ async def get_user_lists(
 
 
 @router.post("/{user_id}/sync")
-async def sync_user_list(
-    user_id: str,
-    current_user: dict = Depends(get_current_user)
-):
+async def sync_user_list(user_id: str, current_user: dict = Depends(get_current_user)):
     """
     Force refresh AniList data only (clear cache, re-fetch lists).
     Does NOT run auto-matching.
@@ -180,8 +222,7 @@ async def sync_user_list(
 
         # Fetch fresh manga list from AniList
         lists = await anilist_client.get_user_manga_list(
-            user_id=int(anilist_id),
-            token=anilist_token
+            user_id=int(anilist_id), token=anilist_token
         )
 
         total_entries = sum(len(v) for v in lists.values())
@@ -207,7 +248,7 @@ class AutoLinkEntryRequest(BaseModel):
 async def auto_link_entry(
     user_id: str,
     request: AutoLinkEntryRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Auto-match a single AniList entry to MangaDex (0.70 confidence).
@@ -219,10 +260,9 @@ async def auto_link_entry(
     try:
         # Check if already linked
         db = get_db()
-        existing = await db.manhwa_connections.find_one({
-            "user_id": ObjectId(mongo_id),
-            "anilist_id": request.anilist_id
-        })
+        existing = await db.manhwa_connections.find_one(
+            {"user_id": ObjectId(mongo_id), "anilist_id": request.anilist_id}
+        )
         if existing:
             return {"status": "already_linked", "anilist_id": request.anilist_id}
 
@@ -231,7 +271,11 @@ async def auto_link_entry(
 
         if not match_result or match_result[1] < 0.70:
             confidence = match_result[1] if match_result else 0
-            return {"status": "no_match", "anilist_id": request.anilist_id, "confidence": confidence}
+            return {
+                "status": "no_match",
+                "anilist_id": request.anilist_id,
+                "confidence": confidence,
+            }
 
         md_data, confidence = match_result
         al_entry = request.anilist_entry
@@ -253,7 +297,7 @@ async def auto_link_entry(
                 "chapters": media.get("chapters"),
                 "average_score": media.get("averageScore"),
                 "start_date": media.get("startDate"),
-                "updated_at": datetime.utcnow()
+                "updated_at": datetime.utcnow(),
             },
             "mangadex_data": {
                 "id": md_data.get("id", ""),
@@ -261,23 +305,27 @@ async def auto_link_entry(
                 "alternative_titles": _extract_alt_titles(md_data),
                 "description": (attrs.get("description", {}) or {}).get("en", ""),
                 "cover_url": _extract_cover_url(md_data),
-                "chapters_count": await mangadex_client.get_manga_chapter_count(md_data.get("id", "")),
+                "chapters_count": await mangadex_client.get_manga_chapter_count(
+                    md_data.get("id", "")
+                ),
                 "year": attrs.get("year"),
                 "status": attrs.get("status"),
-                "tags": [t.get("attributes", {}).get("name", {}).get("en", "")
-                         for t in attrs.get("tags", [])],
+                "tags": [
+                    t.get("attributes", {}).get("name", {}).get("en", "")
+                    for t in attrs.get("tags", [])
+                ],
                 "last_updated": attrs.get("updatedAt"),
             },
             "match_confidence": confidence,
             "manually_linked": False,
             "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.utcnow(),
         }
 
         await db.manhwa_connections.update_one(
             {"user_id": ObjectId(mongo_id), "anilist_id": request.anilist_id},
             {"$set": connection_doc},
-            upsert=True
+            upsert=True,
         )
 
         return {
@@ -295,12 +343,266 @@ async def auto_link_entry(
         return {"status": "error", "anilist_id": request.anilist_id, "error": str(e)}
 
 
+async def _run_auto_link_job(
+    job_id: str,
+    user_id: str,
+    mongo_user_id: str,
+    anilist_token: str,
+    anilist_id: str,
+) -> None:
+    """Background task: run auto-link matching for all unlinked entries."""
+    db = get_db()
+    job_obj_id = ObjectId(job_id)
+
+    try:
+        # Mark job as running
+        await db.auto_link_jobs.update_one(
+            {"_id": job_obj_id},
+            {"$set": {"status": "running", "updated_at": datetime.utcnow()}},
+        )
+
+        # Fetch full AniList list
+        lists = await anilist_client.get_user_manga_list(
+            user_id=int(anilist_id), token=anilist_token
+        )
+        all_entries = [entry for entries in lists.values() for entry in entries]
+
+        # Determine which are already linked
+        existing_connections = await db.manhwa_connections.find(
+            {"user_id": ObjectId(mongo_user_id)}, {"anilist_id": 1}
+        ).to_list(length=None)
+        linked_anilist_ids = {str(c["anilist_id"]) for c in existing_connections}
+
+        unlinked = [
+            e
+            for e in all_entries
+            if str(e.get("media", {}).get("id", "")) not in linked_anilist_ids
+        ]
+
+        total = len(unlinked)
+        await db.auto_link_jobs.update_one(
+            {"_id": job_obj_id},
+            {"$set": {"total": total, "updated_at": datetime.utcnow()}},
+        )
+
+        processed = 0
+        linked = 0
+        failed = 0
+
+        for entry in unlinked:
+            # Check for cancellation / interruption at the top of each iteration
+            job_doc = await db.auto_link_jobs.find_one({"_id": job_obj_id}, {"status": 1})
+            if job_doc and job_doc.get("status") in ("cancelled", "interrupted"):
+                break
+
+            media = entry.get("media", {})
+            anilist_entry_id = str(media.get("id", ""))
+
+            try:
+                match_result = await comparison_service.find_best_match(entry)
+
+                if match_result and match_result[1] >= 0.70:
+                    md_data, confidence = match_result
+                    attrs = md_data.get("attributes", {})
+
+                    connection_doc = {
+                        "user_id": ObjectId(mongo_user_id),
+                        "anilist_id": anilist_entry_id,
+                        "mangadex_id": md_data.get("id", ""),
+                        "anilist_data": {
+                            "id": anilist_entry_id,
+                            "title": media.get("title", {}),
+                            "alternative_titles": media.get("synonyms", []),
+                            "status": entry.get("status"),
+                            "progress": entry.get("progress", 0),
+                            "score": entry.get("score"),
+                            "cover_image": media.get("coverImage", {}).get("large"),
+                            "chapters": media.get("chapters"),
+                            "average_score": media.get("averageScore"),
+                            "start_date": media.get("startDate"),
+                            "updated_at": datetime.utcnow(),
+                        },
+                        "mangadex_data": {
+                            "id": md_data.get("id", ""),
+                            "title": attrs.get("title", {}).get("en", ""),
+                            "alternative_titles": _extract_alt_titles(md_data),
+                            "description": (attrs.get("description", {}) or {}).get("en", ""),
+                            "cover_url": _extract_cover_url(md_data),
+                            "chapters_count": await mangadex_client.get_manga_chapter_count(
+                                md_data.get("id", "")
+                            ),
+                            "year": attrs.get("year"),
+                            "status": attrs.get("status"),
+                            "tags": [
+                                t.get("attributes", {}).get("name", {}).get("en", "")
+                                for t in attrs.get("tags", [])
+                            ],
+                            "last_updated": attrs.get("updatedAt"),
+                        },
+                        "match_confidence": confidence,
+                        "manually_linked": False,
+                        "created_at": datetime.utcnow(),
+                        "updated_at": datetime.utcnow(),
+                    }
+
+                    await db.manhwa_connections.update_one(
+                        {"user_id": ObjectId(mongo_user_id), "anilist_id": anilist_entry_id},
+                        {"$set": connection_doc},
+                        upsert=True,
+                    )
+                    linked += 1
+                else:
+                    failed += 1
+
+            except Exception as entry_err:
+                logger.warning(
+                    f"Auto-link job {job_id}: error on entry {anilist_entry_id}: {entry_err}"
+                )
+                failed += 1
+
+            processed += 1
+            await db.auto_link_jobs.update_one(
+                {"_id": job_obj_id},
+                {
+                    "$set": {
+                        "processed": processed,
+                        "linked": linked,
+                        "failed": failed,
+                        "updated_at": datetime.utcnow(),
+                    }
+                },
+            )
+
+        # Set final status
+        final_doc = await db.auto_link_jobs.find_one({"_id": job_obj_id}, {"status": 1})
+        final_status = final_doc.get("status") if final_doc else "completed"
+        if final_status == "running":
+            final_status = "completed"
+
+        await db.auto_link_jobs.update_one(
+            {"_id": job_obj_id},
+            {
+                "$set": {
+                    "status": final_status,
+                    "updated_at": datetime.utcnow(),
+                    "completed_at": datetime.utcnow() if final_status == "completed" else None,
+                }
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Auto-link job {job_id} failed: {e}", exc_info=True)
+        try:
+            await db.auto_link_jobs.update_one(
+                {"_id": job_obj_id},
+                {"$set": {"status": "interrupted", "updated_at": datetime.utcnow()}},
+            )
+        except Exception:
+            pass
+
+
+@router.post("/{user_id}/auto-link")
+async def start_auto_link_job(
+    user_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),
+):
+    """Start a background auto-link job for all unlinked entries."""
+    _verify_user_access(current_user, user_id)
+    mongo_user_id = current_user["_id"]
+    anilist_id = current_user.get("anilist_id")
+    anilist_token = current_user.get("anilist_token")
+
+    if not anilist_id:
+        raise HTTPException(status_code=400, detail="AniList ID not found")
+
+    db = get_db()
+
+    # Idempotent: return existing job if already pending or running
+    existing_job = await db.auto_link_jobs.find_one(
+        {"user_id": str(anilist_id), "status": {"$in": ["pending", "running"]}},
+        sort=[("started_at", -1)],
+    )
+    if existing_job:
+        return {
+            "job_id": str(existing_job["_id"]),
+            "status": existing_job["status"],
+        }
+
+    # Create new job document
+    job_doc = {
+        "user_id": str(anilist_id),
+        "mongo_user_id": str(mongo_user_id),
+        "status": "pending",
+        "total": 0,
+        "processed": 0,
+        "linked": 0,
+        "failed": 0,
+        "started_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
+        "completed_at": None,
+    }
+    result = await db.auto_link_jobs.insert_one(job_doc)
+    job_id = str(result.inserted_id)
+
+    background_tasks.add_task(
+        _run_auto_link_job,
+        job_id=job_id,
+        user_id=str(user_id),
+        mongo_user_id=str(mongo_user_id),
+        anilist_token=anilist_token,
+        anilist_id=str(anilist_id),
+    )
+
+    return {"job_id": job_id, "status": "pending"}
+
+
+@router.get("/{user_id}/auto-link/status")
+async def get_auto_link_status(
+    user_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get the most recent auto-link job status for the user."""
+    _verify_user_access(current_user, user_id)
+    anilist_id = current_user.get("anilist_id")
+
+    db = get_db()
+    job = await db.auto_link_jobs.find_one(
+        {"user_id": str(anilist_id)},
+        sort=[("started_at", -1)],
+    )
+
+    if not job:
+        return {"job": None}
+
+    job["job_id"] = str(job.pop("_id"))
+    return {"job": job}
+
+
+@router.post("/{user_id}/auto-link/cancel")
+async def cancel_auto_link_job(
+    user_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Cancel any pending or running auto-link job for the user."""
+    _verify_user_access(current_user, user_id)
+    anilist_id = current_user.get("anilist_id")
+
+    db = get_db()
+    result = await db.auto_link_jobs.update_one(
+        {"user_id": str(anilist_id), "status": {"$in": ["pending", "running"]}},
+        {"$set": {"status": "cancelled", "updated_at": datetime.utcnow()}},
+    )
+
+    return {"cancelled": result.modified_count > 0}
+
+
 @router.get("/{user_id}/connections")
 async def get_user_connections(
     user_id: str,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """Get paginated AniList-MangaDex connections for a user"""
     _verify_user_access(current_user, user_id)
@@ -311,9 +613,13 @@ async def get_user_connections(
 
         total = await db.manhwa_connections.count_documents({"user_id": ObjectId(mongo_id)})
 
-        connections = await db.manhwa_connections.find(
-            {"user_id": ObjectId(mongo_id)}
-        ).sort("updated_at", -1).skip(skip).limit(limit).to_list(length=limit)
+        connections = (
+            await db.manhwa_connections.find({"user_id": ObjectId(mongo_id)})
+            .sort("updated_at", -1)
+            .skip(skip)
+            .limit(limit)
+            .to_list(length=limit)
+        )
 
         # Serialize ObjectIds
         for conn in connections:
@@ -325,7 +631,7 @@ async def get_user_connections(
             "total": total,
             "skip": skip,
             "limit": limit,
-            "has_next": skip + limit < total
+            "has_next": skip + limit < total,
         }
 
     except Exception as e:

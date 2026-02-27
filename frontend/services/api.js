@@ -1,6 +1,6 @@
 // API client for backend communication
 import axios from 'axios';
-
+import { useAuthStore } from '../stores/useAuthStore';
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8009',
   timeout: 30090,
@@ -20,8 +20,10 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      // Clear both localStorage and Zustand store
       localStorage.removeItem('auth_token');
-      // Could redirect to login here
+      const { logout } = useAuthStore.getState();
+      logout();
     }
     return Promise.reject(error);
   }
@@ -69,6 +71,15 @@ export const apiClient = {
       anilist_id: String(anilistId),
       anilist_entry: anilistEntry,
     }),
+
+  startAutoLink: (userId) =>
+    api.post(`/users/${userId}/auto-link`),
+
+  getAutoLinkStatus: (userId) =>
+    api.get(`/users/${userId}/auto-link/status`),
+
+  cancelAutoLink: (userId) =>
+    api.post(`/users/${userId}/auto-link/cancel`),
 
   // Connections
   getUserConnections: (userId, skip = 0, limit = 20) =>

@@ -47,7 +47,7 @@ def _parse_mangadex_manga(data: dict) -> dict:
     )
 
     # Use image proxy for cover URL
-    cover_url = f"/images/cover/mangadex/{data['id']}"
+    cover_url = f"/api/images/cover/mangadex/{data['id']}"
     authors = []
     artists = []
     for rel in data.get("relationships", []):
@@ -102,15 +102,15 @@ def _parse_anilist_manga(data: dict) -> dict:
         "title": title,
         "alternative_titles": data.get("synonyms", []),
         "description": data.get("description", ""),
-        "cover_url": f"/images/cover/anilist/{data.get('id', '')}",
+        "cover_url": f"/api/images/cover/anilist/{data.get('id', '')}",
         "authors": [],
         "artists": [],
         "genres": data.get("genres", []),
         "tags": [t.get("name", "") for t in data.get("tags", [])],
         "status": data.get("status"),
-        "year": data.get("startDate", {}).get("year") if data.get("startDate") else None,
+        "year": (data.get("startDate", {}).get("year") if data.get("startDate") else None),
         "chapters_count": data.get("chapters"),
-        "rating": data.get("averageScore", 0) / 10.0 if data.get("averageScore") else None,
+        "rating": (data.get("averageScore", 0) / 10.0 if data.get("averageScore") else None),
     }
 
 
@@ -332,7 +332,8 @@ async def browse_manga(
         None, description="Comma-separated formats (MANGA, MANHWA, MANHUA, ONE_SHOT)"
     ),
     status: Optional[str] = Query(
-        None, description="Media status (RELEASING, FINISHED, NOT_YET_RELEASED, CANCELLED, HIATUS)"
+        None,
+        description="Media status (RELEASING, FINISHED, NOT_YET_RELEASED, CANCELLED, HIATUS)",
     ),
     year_min: Optional[int] = Query(None),
     year_max: Optional[int] = Query(None),

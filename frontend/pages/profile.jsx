@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { User, BookOpen, Link2, LogIn } from 'lucide-react';
@@ -22,6 +22,25 @@ export default function ProfilePage() {
   });
 
   const displayUser = userData || user;
+
+  // Save scroll position continuously while on profile page
+  useEffect(() => {
+    const onScroll = () => {
+      sessionStorage.setItem('profile:scrollY', String(Math.round(window.scrollY)));
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Restore scroll position once user list data has loaded
+  const listDataLoaded = listStats.total_entries !== null;
+  useEffect(() => {
+    if (!listDataLoaded) return;
+    const saved = sessionStorage.getItem('profile:scrollY');
+    if (saved) {
+      requestAnimationFrame(() => window.scrollTo({ top: parseInt(saved, 10), behavior: 'instant' }));
+    }
+  }, [listDataLoaded]);
 
   if (!isAuthenticated) {
     return (

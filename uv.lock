@@ -500,7 +500,7 @@ wheels = [
 
 [[package]]
 name = "manhwa-discovery"
-version = "0.1.0"
+version = "0.1.2"
 source = { virtual = "." }
 dependencies = [
     { name = "black" },

@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { VirtuosoGrid } from 'react-virtuoso';
 import { RefreshCw, Link2, SlidersHorizontal, ArrowUpDown } from 'lucide-react';
 import { apiClient } from '../services/api';
 import ManhwaCard from './ManhwaCard';
 import LinkManagementModal from './LinkManagementModal';
 import { SkeletonGrid } from './SkeletonCard';
+import Alert from './Alert';
 
 const STATUS_TABS = [
   { key: 'all', label: 'All' },
@@ -70,24 +70,39 @@ function getEntryUnread(entry) {
   return Math.max(0, total - progress);
 }
 
+function useSessionState(key, defaultValue) {
+  const [value, setValue] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem(key);
+      return stored !== null ? JSON.parse(stored) : defaultValue;
+    } catch { return defaultValue; }
+  });
+  const setAndPersist = useCallback((next) => {
+    setValue((prev) => {
+      const resolved = typeof next === 'function' ? next(prev) : next;
+      try { sessionStorage.setItem(key, JSON.stringify(resolved)); } catch {}
+      return resolved;
+    });
+  }, [key]);
+  return [value, setAndPersist];
+}
+
 export default function UserListView({ userId, onStatsLoaded }) {
-  const [activeTab, setActiveTab] = useState('all');
+  const [activeTab, setActiveTab] = useSessionState('profile:activeTab', 'all');
   const [linkModal, setLinkModal] = useState({ open: false, manhwa: null, mode: 'link' });
-  const [autoLinking, setAutoLinking] = useState(false);
-  const [linkingEntryId, setLinkingEntryId] = useState(null);
-  const [autoLinkResults, setAutoLinkResults] = useState(null);
-  const [sortBy, setSortBy] = useState('title_asc');
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
-  const [showFilters, setShowFilters] = useState(false);
+  const [sortBy, setSortBy] = useSessionState('profile:sortBy', 'title_asc');
+  const [filters, setFilters] = useSessionState('profile:filters', DEFAULT_FILTERS);
+  const [showFilters, setShowFilters] = useSessionState('profile:showFilters', false);
 
   const updateFilter = (key, value) => setFilters((prev) => ({ ...prev, [key]: value }));
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['userLists', userId, activeTab === 'all' ? null : activeTab],
-    queryFn: () => apiClient.getUserLists(userId, activeTab === 'all' ? null : activeTab),
+    queryKey: ['userLists', userId],
+    queryFn: () => apiClient.getUserLists(userId, null),
     enabled: !!userId,
     select: (res) => res.data,
+    staleTime: 2 * 60 * 1000,
   });
 
   const syncMutation = useMutation({
@@ -104,6 +119,43 @@ export default function UserListView({ userId, onStatsLoaded }) {
     },
   });
 
+  // Auto-link mutations
+  const startAutoLinkMutation = useMutation({
+    mutationFn: () => apiClient.startAutoLink(userId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['autoLinkStatus', userId] }),
+  });
+
+  const cancelAutoLinkMutation = useMutation({
+    mutationFn: () => apiClient.cancelAutoLink(userId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['autoLinkStatus', userId] }),
+  });
+
+  // Status poller — polls every 2s when active, stops when terminal
+  const { data: jobStatusData } = useQuery({
+    queryKey: ['autoLinkStatus', userId],
+    queryFn: () => apiClient.getAutoLinkStatus(userId),
+    enabled: !!userId,
+    select: (res) => res.data?.job ?? null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.data?.job?.status;
+      return (status === 'running' || status === 'pending') ? 2000 : false;
+    },
+  });
+
+  // Auto-refresh list when job completes
+  const prevJobStatusRef = useRef(null);
+  useEffect(() => {
+    if (jobStatusData?.status === 'completed' && prevJobStatusRef.current?.status !== 'completed') {
+      queryClient.invalidateQueries({ queryKey: ['userLists'] });
+    }
+    prevJobStatusRef.current = jobStatusData;
+  }, [jobStatusData, queryClient]);
+
+  // Derived job state
+  const job = jobStatusData;
+  const isJobActive = job?.status === 'running' || job?.status === 'pending';
+  const jobPercent = job?.total > 0 ? Math.round((job.processed / job.total) * 100) : 0;
+
   // Report stats to parent
   useEffect(() => {
     if (data && onStatsLoaded) {
@@ -116,39 +168,38 @@ export default function UserListView({ userId, onStatsLoaded }) {
 
   const lists = data?.lists || {};
 
-  // Flatten entries for display based on active tab
-  const rawList = activeTab === 'all'
-    ? Object.values(lists).flat()
-    : lists[activeTab.toLowerCase()] || [];
+  // Flatten entries for display based on active tab (filter locally from cached data)
+  const rawList = useMemo(() => {
+    if (activeTab === 'all') {
+      return Object.values(lists).flat();
+    }
+    const statusKey = activeTab.toLowerCase();
+    return lists[statusKey] || [];
+  }, [lists, activeTab]);
 
   // Apply filters and sorting
   const displayList = useMemo(() => {
     let filtered = [...rawList];
 
-    // Link status filter
     if (filters.linkStatus === 'linked') {
       filtered = filtered.filter((e) => e.is_linked);
     } else if (filters.linkStatus === 'unlinked') {
       filtered = filtered.filter((e) => !e.is_linked);
     }
 
-    // Min rating (AniList averageScore is 0-100, displayed as /10)
     if (filters.minRating > 0) {
       const threshold = filters.minRating * 10;
       filtered = filtered.filter((e) => (e.media?.averageScore || 0) >= threshold);
     }
 
-    // Min user score
     if (filters.minScore > 0) {
       filtered = filtered.filter((e) => (e.score || 0) >= filters.minScore);
     }
 
-    // Min unread chapters
     if (filters.minUnread > 0) {
       filtered = filtered.filter((e) => getEntryUnread(e) >= filters.minUnread);
     }
 
-    // Year range
     if (filters.yearMin !== '') {
       const yr = Number(filters.yearMin);
       filtered = filtered.filter((e) => (e.media?.startDate?.year || 0) >= yr);
@@ -158,7 +209,6 @@ export default function UserListView({ userId, onStatsLoaded }) {
       filtered = filtered.filter((e) => (e.media?.startDate?.year || 9999) <= yr);
     }
 
-    // Sort
     const [field, dir] = sortBy.split('_');
     const asc = dir === 'asc' ? 1 : -1;
 
@@ -185,50 +235,22 @@ export default function UserListView({ userId, onStatsLoaded }) {
   }, [rawList, filters, sortBy]);
 
   // Count entries per status
-  const statusCounts = {};
-  for (const [status, entries] of Object.entries(lists)) {
-    statusCounts[status.toUpperCase()] = entries.length;
-  }
-  const totalCount = Object.values(lists).reduce((sum, entries) => sum + entries.length, 0);
-
-  // Auto-link all unlinked entries one by one
-  const handleAutoLinkAll = useCallback(async () => {
-    const allEntries = Object.values(lists).flat();
-    const unlinked = allEntries.filter((e) => !e.is_linked);
-    if (unlinked.length === 0) return;
-
-    setAutoLinking(true);
-    setAutoLinkResults(null);
-    let linked = 0;
-    let failed = 0;
-
-    for (const entry of unlinked) {
-      const media = entry.media || {};
-      const mediaId = String(media.id);
-      setLinkingEntryId(mediaId);
-
-      try {
-        const res = await apiClient.autoLinkEntry(userId, mediaId, entry);
-        if (res.data?.status === 'linked') {
-          linked++;
-        } else {
-          failed++;
-        }
-      } catch {
-        failed++;
-      }
+  const { statusCounts, totalCount } = useMemo(() => {
+    const counts = {};
+    for (const [status, entries] of Object.entries(lists)) {
+      counts[status.toUpperCase()] = entries.length;
     }
-
-    setLinkingEntryId(null);
-    setAutoLinking(false);
-    setAutoLinkResults({ linked, failed, total: unlinked.length });
-    queryClient.invalidateQueries({ queryKey: ['userLists'] });
-  }, [lists, userId, queryClient]);
+    const total = Object.values(lists).reduce((sum, entries) => sum + entries.length, 0);
+    return { statusCounts: counts, totalCount: total };
+  }, [lists]);
 
   if (error) {
     return (
       <div className="text-center py-12">
         <p className="text-text-secondary">Failed to load manga list.</p>
+        {error?.response?.data?.detail && (
+          <p className="text-xs text-text-tertiary mt-2">{error.response.data.detail}</p>
+        )}
         <button
           onClick={() => queryClient.invalidateQueries({ queryKey: ['userLists'] })}
           className="mt-4 px-4 py-2 rounded-xl glass glass-hover text-sm"
@@ -241,48 +263,107 @@ export default function UserListView({ userId, onStatsLoaded }) {
 
   return (
     <div className="space-y-6">
-      {/* Header with sync button */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">My Manga List</h2>
-          <p className="text-sm text-text-secondary mt-1">
-            {data?.total_entries || 0} entries, {data?.total_linked || 0} linked to MangaDex
-          </p>
+      {/* Header with sync/auto-link buttons and progress bar */}
+      <div className="flex flex-col gap-3">
+        {/* Title + fixed-width button row */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-xl font-semibold">My Manga List</h2>
+            <p className="text-sm text-text-secondary mt-1">
+              {data?.total_entries || 0} entries, {data?.total_linked || 0} linked to MangaDex
+            </p>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <button
+              onClick={() => syncMutation.mutate()}
+              disabled={syncMutation.isPending || isJobActive}
+              className="flex items-center justify-center gap-1.5 w-20 py-2 rounded-xl bg-accent-primary/20 border border-accent-primary hover:bg-accent-primary/30 transition-colors text-sm disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 flex-shrink-0 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+              <span className="whitespace-nowrap">Sync</span>
+            </button>
+            <button
+              onClick={() => startAutoLinkMutation.mutate()}
+              disabled={isJobActive || syncMutation.isPending}
+              className="flex items-center justify-center gap-1.5 w-28 py-2 rounded-xl bg-green-500/20 border border-green-500 hover:bg-green-500/30 transition-colors text-sm disabled:opacity-50"
+            >
+              <Link2 className="w-4 h-4 flex-shrink-0" />
+              <span className="whitespace-nowrap">Auto-Link</span>
+            </button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => syncMutation.mutate()}
-            disabled={syncMutation.isPending || autoLinking}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-accent-primary/20 border border-accent-primary hover:bg-accent-primary/30 transition-colors text-sm disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
-            {syncMutation.isPending ? 'Syncing...' : 'Sync'}
-          </button>
-          <button
-            onClick={handleAutoLinkAll}
-            disabled={autoLinking || syncMutation.isPending}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-green-500/20 border border-green-500 hover:bg-green-500/30 transition-colors text-sm disabled:opacity-50"
-          >
-            <Link2 className={`w-4 h-4 ${autoLinking ? 'animate-pulse' : ''}`} />
-            {autoLinking ? 'Linking...' : 'Auto-Link All'}
-          </button>
-        </div>
+
+        {/* Progress bar — only shown when a job exists */}
+        {job && (
+          <div className="rounded-xl glass p-3 space-y-2">
+            {isJobActive ? (
+              <>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-text-secondary">
+                    {job.status === 'pending'
+                      ? 'Starting…'
+                      : `Linking ${job.processed} / ${job.total}`}
+                  </span>
+                  <button
+                    onClick={() => cancelAutoLinkMutation.mutate()}
+                    disabled={cancelAutoLinkMutation.isPending}
+                    className="text-xs text-red-400 hover:text-red-300 transition-colors px-2 py-1 rounded-lg glass disabled:opacity-50 flex-shrink-0"
+                  >
+                    Stop
+                  </button>
+                </div>
+                <div className="w-full h-2 rounded-full bg-surface-elevated overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-green-500 transition-all duration-500"
+                    style={{ width: `${job.total > 0 ? jobPercent : 0}%` }}
+                  />
+                </div>
+                {job.total > 0 && (
+                  <p className="text-xs text-text-tertiary">
+                    {jobPercent}% — {job.linked} linked, {job.failed} unmatched so far
+                  </p>
+                )}
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                {job.status === 'completed' && (
+                  <><Link2 className="w-4 h-4 text-green-400 flex-shrink-0" />
+                  <span className="text-sm text-green-400">
+                    Done: {job.linked} linked, {job.failed} unmatched (of {job.total})
+                  </span></>
+                )}
+                {job.status === 'cancelled' && (
+                  <><Link2 className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+                  <span className="text-sm text-yellow-400">
+                    Cancelled after {job.processed}/{job.total} — {job.linked} linked
+                  </span></>
+                )}
+                {job.status === 'interrupted' && (
+                  <><Link2 className="w-4 h-4 text-text-tertiary flex-shrink-0" />
+                  <span className="text-sm text-text-tertiary">
+                    Interrupted (server restart) — {job.linked} linked before stop
+                  </span></>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Warning message if serving stale data */}
+      {data?.warning && (
+        <Alert
+          variant="warning"
+          message={data.warning}
+          dismissible={true}
+        />
+      )}
 
       {/* Sync result message */}
       {syncMutation.isSuccess && (
         <div className="rounded-xl glass p-3 text-sm text-green-400 border border-green-400/20">
           <RefreshCw className="w-4 h-4 inline mr-2" />
           AniList data refreshed ({syncMutation.data?.data?.total_entries || 0} entries)
-        </div>
-      )}
-
-      {/* Auto-link result message */}
-      {autoLinkResults && (
-        <div className="rounded-xl glass p-3 text-sm text-green-400 border border-green-400/20">
-          <Link2 className="w-4 h-4 inline mr-2" />
-          Auto-link complete: {autoLinkResults.linked} linked, {autoLinkResults.failed} unmatched
-          (out of {autoLinkResults.total})
         </div>
       )}
 
@@ -464,42 +545,18 @@ export default function UserListView({ userId, onStatsLoaded }) {
         <SkeletonGrid count={10} />
       ) : displayList.length === 0 ? (
         <div className="text-center py-16 text-text-secondary">
-          <p>No entries found{activeTab !== 'all' ? ` in ${activeTab}` : ''}.</p>
+          {activeTab === 'all' ? (
+            <>
+              <p>Your manga list is empty.</p>
+              <p className="text-sm mt-2">Add manga from the search page to get started!</p>
+            </>
+          ) : (
+            <>
+              <p>No manga in {STATUS_TABS.find(t => t.key === activeTab)?.label || activeTab}.</p>
+              <p className="text-sm mt-2">Entries with this status will appear here.</p>
+            </>
+          )}
         </div>
-      ) : displayList.length > 50 ? (
-        <VirtuosoGrid
-          totalCount={displayList.length}
-          overscan={200}
-          listClassName="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
-          itemContent={(index) => {
-            const entry = displayList[index];
-            const media = entry.media || {};
-            const manhwa = {
-              id: media.id,
-              title: media.title?.english || media.title?.romaji || media.title?.native || 'Unknown',
-              cover_url: entry.mangadex_data?.cover_url || `/api/images/cover/anilist/${media.id}`,
-              rating: media.averageScore ? media.averageScore / 10 : null,
-              chapters_count: entry.mangadex_data?.chapters_count || media.chapters,
-              year: media.startDate?.year,
-              source: 'anilist',
-              user_status: entry.status,
-              user_progress: entry.progress,
-              user_score: entry.score,
-            };
-            const isCurrentlyLinking = linkingEntryId === String(media.id);
-            return (
-              <ManhwaCard
-                manhwa={manhwa}
-                isLinked={entry.is_linked}
-                isAutoLinking={isCurrentlyLinking}
-                connectionId={entry.connection?._id}
-                onLink={(m) => setLinkModal({ open: true, manhwa: m, mode: 'link' })}
-                onFixLink={(m) => setLinkModal({ open: true, manhwa: m, mode: 'relink' })}
-                onUnlink={(connId) => unlinkMutation.mutate(connId)}
-              />
-            );
-          }}
-        />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {displayList.map((entry) => {
@@ -507,7 +564,7 @@ export default function UserListView({ userId, onStatsLoaded }) {
             const manhwa = {
               id: media.id,
               title: media.title?.english || media.title?.romaji || media.title?.native || 'Unknown',
-              cover_url: entry.mangadex_data?.cover_url || `/api/images/cover/anilist/${media.id}`,
+              cover_url: media.coverImage?.large || media.coverImage?.medium || `/api/images/cover/anilist/${media.id}`,
               rating: media.averageScore ? media.averageScore / 10 : null,
               chapters_count: entry.mangadex_data?.chapters_count || media.chapters,
               year: media.startDate?.year,
@@ -517,14 +574,11 @@ export default function UserListView({ userId, onStatsLoaded }) {
               user_score: entry.score,
             };
 
-            const isCurrentlyLinking = linkingEntryId === String(media.id);
-
             return (
               <ManhwaCard
                 key={entry.id}
                 manhwa={manhwa}
                 isLinked={entry.is_linked}
-                isAutoLinking={isCurrentlyLinking}
                 connectionId={entry.connection?._id}
                 onLink={(m) => setLinkModal({ open: true, manhwa: m, mode: 'link' })}
                 onFixLink={(m) => setLinkModal({ open: true, manhwa: m, mode: 'relink' })}
