@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { RefreshCw, Link2, SlidersHorizontal, ArrowUpDown } from 'lucide-react';
+import { RefreshCw, Link2, SlidersHorizontal, ArrowUpDown, X } from 'lucide-react';
 import { apiClient } from '../services/api';
 import ManhwaCard from './ManhwaCard';
 import LinkManagementModal from './LinkManagementModal';
@@ -142,13 +142,35 @@ export default function UserListView({ userId, onStatsLoaded }) {
     },
   });
 
-  // Auto-refresh list when job completes
+  // Auto-refresh list when job completes; auto-dismiss banner on terminal state
   const prevJobStatusRef = useRef(null);
+  const dismissTimerRef = useRef(null);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
   useEffect(() => {
-    if (jobStatusData?.status === 'completed' && prevJobStatusRef.current?.status !== 'completed') {
+    const prev = prevJobStatusRef.current;
+    const cur = jobStatusData;
+
+    // Invalidate list when job completes
+    if (cur?.status === 'completed' && prev?.status !== 'completed') {
       queryClient.invalidateQueries({ queryKey: ['userLists'] });
     }
-    prevJobStatusRef.current = jobStatusData;
+
+    // Reset dismissed flag when a fresh job starts
+    if (cur?.status === 'pending' || cur?.status === 'running') {
+      setBannerDismissed(false);
+    }
+
+    // Auto-dismiss on terminal status transition
+    const terminal = ['completed', 'cancelled', 'interrupted'];
+    const nowTerminal = terminal.includes(cur?.status);
+    const wasTerminal = terminal.includes(prev?.status);
+    if (nowTerminal && !wasTerminal) {
+      clearTimeout(dismissTimerRef.current);
+      dismissTimerRef.current = setTimeout(() => setBannerDismissed(true), 5000);
+    }
+
+    prevJobStatusRef.current = cur;
+    return () => clearTimeout(dismissTimerRef.current);
   }, [jobStatusData, queryClient]);
 
   // Derived job state
@@ -293,8 +315,8 @@ export default function UserListView({ userId, onStatsLoaded }) {
           </div>
         </div>
 
-        {/* Progress bar — only shown when a job exists */}
-        {job && (
+        {/* Progress bar — only shown when a job exists and not dismissed */}
+        {job && !bannerDismissed && (
           <div className="rounded-xl glass p-3 space-y-2">
             {isJobActive ? (
               <>
@@ -325,25 +347,34 @@ export default function UserListView({ userId, onStatsLoaded }) {
                 )}
               </>
             ) : (
-              <div className="flex items-center gap-2">
-                {job.status === 'completed' && (
-                  <><Link2 className="w-4 h-4 text-green-400 flex-shrink-0" />
-                  <span className="text-sm text-green-400">
-                    Done: {job.linked} linked, {job.failed} unmatched (of {job.total})
-                  </span></>
-                )}
-                {job.status === 'cancelled' && (
-                  <><Link2 className="w-4 h-4 text-yellow-400 flex-shrink-0" />
-                  <span className="text-sm text-yellow-400">
-                    Cancelled after {job.processed}/{job.total} — {job.linked} linked
-                  </span></>
-                )}
-                {job.status === 'interrupted' && (
-                  <><Link2 className="w-4 h-4 text-text-tertiary flex-shrink-0" />
-                  <span className="text-sm text-text-tertiary">
-                    Interrupted (server restart) — {job.linked} linked before stop
-                  </span></>
-                )}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  {job.status === 'completed' && (
+                    <><Link2 className="w-4 h-4 text-green-400 flex-shrink-0" />
+                    <span className="text-sm text-green-400">
+                      Done: {job.linked} linked, {job.failed} unmatched (of {job.total})
+                    </span></>
+                  )}
+                  {job.status === 'cancelled' && (
+                    <><Link2 className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+                    <span className="text-sm text-yellow-400">
+                      Cancelled after {job.processed}/{job.total} — {job.linked} linked
+                    </span></>
+                  )}
+                  {job.status === 'interrupted' && (
+                    <><Link2 className="w-4 h-4 text-text-tertiary flex-shrink-0" />
+                    <span className="text-sm text-text-tertiary">
+                      Interrupted (server restart) — {job.linked} linked before stop
+                    </span></>
+                  )}
+                </div>
+                <button
+                  onClick={() => setBannerDismissed(true)}
+                  className="text-text-tertiary hover:text-text-secondary transition-colors flex-shrink-0"
+                  aria-label="Dismiss"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
             )}
           </div>
