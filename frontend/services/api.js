@@ -72,6 +72,15 @@ export const apiClient = {
       anilist_entry: anilistEntry,
     }),
 
+  startAutoLink: (userId) =>
+    api.post(`/users/${userId}/auto-link`),
+
+  getAutoLinkStatus: (userId) =>
+    api.get(`/users/${userId}/auto-link/status`),
+
+  cancelAutoLink: (userId) =>
+    api.post(`/users/${userId}/auto-link/cancel`),
+
   // Connections
   getUserConnections: (userId, skip = 0, limit = 20) =>
     api.get(`/users/${userId}/connections`, { params: { skip, limit } }),
