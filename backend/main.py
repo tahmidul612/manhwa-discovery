@@ -1,12 +1,13 @@
 # Backend application entry point
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from backend.config.settings import settings
-from backend.database.connection import connect_db, close_db, health_check
+from backend.database.connection import connect_db, close_db, health_check, get_db
 from backend.database.cache import cache_service
 from backend.services.mangadex.client import mangadex_client
 from backend.services.anilist.client import anilist_client
@@ -31,6 +32,18 @@ async def lifespan(app: FastAPI):
         # Connect to MongoDB
         await connect_db()
         logger.info("✓ MongoDB connected")
+
+        # Recover jobs that were "running" when the server was killed
+        try:
+            db = get_db()
+            result = await db.auto_link_jobs.update_many(
+                {"status": "running"},
+                {"$set": {"status": "interrupted", "updated_at": datetime.utcnow()}},
+            )
+            if result.modified_count > 0:
+                logger.warning(f"Recovered {result.modified_count} interrupted auto-link job(s)")
+        except Exception as recovery_err:
+            logger.warning(f"Auto-link job recovery skipped: {recovery_err}")
 
         # Connect to Redis cache
         await cache_service.connect()

@@ -2,7 +2,7 @@
 import logging
 from typing import Optional
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends, Query
 from pydantic import BaseModel
 from bson import ObjectId
 from backend.api.middleware.auth import get_current_user
@@ -341,6 +341,260 @@ async def auto_link_entry(
     except Exception as e:
         logger.error(f"Auto-link entry failed for {request.anilist_id}: {e}")
         return {"status": "error", "anilist_id": request.anilist_id, "error": str(e)}
+
+
+async def _run_auto_link_job(
+    job_id: str,
+    user_id: str,
+    mongo_user_id: str,
+    anilist_token: str,
+    anilist_id: str,
+) -> None:
+    """Background task: run auto-link matching for all unlinked entries."""
+    db = get_db()
+    job_obj_id = ObjectId(job_id)
+
+    try:
+        # Mark job as running
+        await db.auto_link_jobs.update_one(
+            {"_id": job_obj_id},
+            {"$set": {"status": "running", "updated_at": datetime.utcnow()}},
+        )
+
+        # Fetch full AniList list
+        lists = await anilist_client.get_user_manga_list(
+            user_id=int(anilist_id), token=anilist_token
+        )
+        all_entries = [entry for entries in lists.values() for entry in entries]
+
+        # Determine which are already linked
+        existing_connections = await db.manhwa_connections.find(
+            {"user_id": ObjectId(mongo_user_id)}, {"anilist_id": 1}
+        ).to_list(length=None)
+        linked_anilist_ids = {str(c["anilist_id"]) for c in existing_connections}
+
+        unlinked = [
+            e
+            for e in all_entries
+            if str(e.get("media", {}).get("id", "")) not in linked_anilist_ids
+        ]
+
+        total = len(unlinked)
+        await db.auto_link_jobs.update_one(
+            {"_id": job_obj_id},
+            {"$set": {"total": total, "updated_at": datetime.utcnow()}},
+        )
+
+        processed = 0
+        linked = 0
+        failed = 0
+
+        for entry in unlinked:
+            # Check for cancellation / interruption at the top of each iteration
+            job_doc = await db.auto_link_jobs.find_one({"_id": job_obj_id}, {"status": 1})
+            if job_doc and job_doc.get("status") in ("cancelled", "interrupted"):
+                break
+
+            media = entry.get("media", {})
+            anilist_entry_id = str(media.get("id", ""))
+
+            try:
+                match_result = await comparison_service.find_best_match(entry)
+
+                if match_result and match_result[1] >= 0.70:
+                    md_data, confidence = match_result
+                    attrs = md_data.get("attributes", {})
+
+                    connection_doc = {
+                        "user_id": ObjectId(mongo_user_id),
+                        "anilist_id": anilist_entry_id,
+                        "mangadex_id": md_data.get("id", ""),
+                        "anilist_data": {
+                            "id": anilist_entry_id,
+                            "title": media.get("title", {}),
+                            "alternative_titles": media.get("synonyms", []),
+                            "status": entry.get("status"),
+                            "progress": entry.get("progress", 0),
+                            "score": entry.get("score"),
+                            "cover_image": media.get("coverImage", {}).get("large"),
+                            "chapters": media.get("chapters"),
+                            "average_score": media.get("averageScore"),
+                            "start_date": media.get("startDate"),
+                            "updated_at": datetime.utcnow(),
+                        },
+                        "mangadex_data": {
+                            "id": md_data.get("id", ""),
+                            "title": attrs.get("title", {}).get("en", ""),
+                            "alternative_titles": _extract_alt_titles(md_data),
+                            "description": (attrs.get("description", {}) or {}).get("en", ""),
+                            "cover_url": _extract_cover_url(md_data),
+                            "chapters_count": await mangadex_client.get_manga_chapter_count(
+                                md_data.get("id", "")
+                            ),
+                            "year": attrs.get("year"),
+                            "status": attrs.get("status"),
+                            "tags": [
+                                t.get("attributes", {}).get("name", {}).get("en", "")
+                                for t in attrs.get("tags", [])
+                            ],
+                            "last_updated": attrs.get("updatedAt"),
+                        },
+                        "match_confidence": confidence,
+                        "manually_linked": False,
+                        "created_at": datetime.utcnow(),
+                        "updated_at": datetime.utcnow(),
+                    }
+
+                    await db.manhwa_connections.update_one(
+                        {"user_id": ObjectId(mongo_user_id), "anilist_id": anilist_entry_id},
+                        {"$set": connection_doc},
+                        upsert=True,
+                    )
+                    linked += 1
+                else:
+                    failed += 1
+
+            except Exception as entry_err:
+                logger.warning(
+                    f"Auto-link job {job_id}: error on entry {anilist_entry_id}: {entry_err}"
+                )
+                failed += 1
+
+            processed += 1
+            await db.auto_link_jobs.update_one(
+                {"_id": job_obj_id},
+                {
+                    "$set": {
+                        "processed": processed,
+                        "linked": linked,
+                        "failed": failed,
+                        "updated_at": datetime.utcnow(),
+                    }
+                },
+            )
+
+        # Set final status
+        final_doc = await db.auto_link_jobs.find_one({"_id": job_obj_id}, {"status": 1})
+        final_status = final_doc.get("status") if final_doc else "completed"
+        if final_status == "running":
+            final_status = "completed"
+
+        await db.auto_link_jobs.update_one(
+            {"_id": job_obj_id},
+            {
+                "$set": {
+                    "status": final_status,
+                    "updated_at": datetime.utcnow(),
+                    "completed_at": datetime.utcnow() if final_status == "completed" else None,
+                }
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Auto-link job {job_id} failed: {e}", exc_info=True)
+        try:
+            await db.auto_link_jobs.update_one(
+                {"_id": job_obj_id},
+                {"$set": {"status": "interrupted", "updated_at": datetime.utcnow()}},
+            )
+        except Exception:
+            pass
+
+
+@router.post("/{user_id}/auto-link")
+async def start_auto_link_job(
+    user_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),
+):
+    """Start a background auto-link job for all unlinked entries."""
+    _verify_user_access(current_user, user_id)
+    mongo_user_id = current_user["_id"]
+    anilist_id = current_user.get("anilist_id")
+    anilist_token = current_user.get("anilist_token")
+
+    if not anilist_id:
+        raise HTTPException(status_code=400, detail="AniList ID not found")
+
+    db = get_db()
+
+    # Idempotent: return existing job if already pending or running
+    existing_job = await db.auto_link_jobs.find_one(
+        {"user_id": str(anilist_id), "status": {"$in": ["pending", "running"]}},
+        sort=[("started_at", -1)],
+    )
+    if existing_job:
+        return {
+            "job_id": str(existing_job["_id"]),
+            "status": existing_job["status"],
+        }
+
+    # Create new job document
+    job_doc = {
+        "user_id": str(anilist_id),
+        "mongo_user_id": str(mongo_user_id),
+        "status": "pending",
+        "total": 0,
+        "processed": 0,
+        "linked": 0,
+        "failed": 0,
+        "started_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
+        "completed_at": None,
+    }
+    result = await db.auto_link_jobs.insert_one(job_doc)
+    job_id = str(result.inserted_id)
+
+    background_tasks.add_task(
+        _run_auto_link_job,
+        job_id=job_id,
+        user_id=str(user_id),
+        mongo_user_id=str(mongo_user_id),
+        anilist_token=anilist_token,
+        anilist_id=str(anilist_id),
+    )
+
+    return {"job_id": job_id, "status": "pending"}
+
+
+@router.get("/{user_id}/auto-link/status")
+async def get_auto_link_status(
+    user_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get the most recent auto-link job status for the user."""
+    _verify_user_access(current_user, user_id)
+    anilist_id = current_user.get("anilist_id")
+
+    db = get_db()
+    job = await db.auto_link_jobs.find_one(
+        {"user_id": str(anilist_id)},
+        sort=[("started_at", -1)],
+    )
+
+    if not job:
+        return {"job": None}
+
+    job["job_id"] = str(job.pop("_id"))
+    return {"job": job}
+
+
+@router.post("/{user_id}/auto-link/cancel")
+async def cancel_auto_link_job(
+    user_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Cancel any pending or running auto-link job for the user."""
+    _verify_user_access(current_user, user_id)
+    anilist_id = current_user.get("anilist_id")
+
+    db = get_db()
+    result = await db.auto_link_jobs.update_one(
+        {"user_id": str(anilist_id), "status": {"$in": ["pending", "running"]}},
+        {"$set": {"status": "cancelled", "updated_at": datetime.utcnow()}},
+    )
+
+    return {"cancelled": result.modified_count > 0}
 
 
 @router.get("/{user_id}/connections")

@@ -22,7 +22,7 @@ async def connect_db():
         _db = _client[settings.MONGODB_DB_NAME]
 
         # Test connection
-        await _client.admin.command('ping')
+        await _client.admin.command("ping")
         logger.info("MongoDB connection established successfully")
 
         # Create indexes
@@ -60,15 +60,19 @@ async def create_indexes():
         logger.info("Created indexes for 'users' collection")
 
         # Manhwa connections collection indexes
-        await db.manhwa_connections.create_index([
-            ("user_id", ASCENDING),
-            ("anilist_id", ASCENDING)
-        ], unique=True)
+        await db.manhwa_connections.create_index(
+            [("user_id", ASCENDING), ("anilist_id", ASCENDING)], unique=True
+        )
         await db.manhwa_connections.create_index([("user_id", ASCENDING)])
         await db.manhwa_connections.create_index([("anilist_id", ASCENDING)])
         await db.manhwa_connections.create_index([("mangadex_id", ASCENDING)])
         await db.manhwa_connections.create_index([("match_confidence", DESCENDING)])
         logger.info("Created indexes for 'manhwa_connections' collection")
+
+        # Auto-link jobs collection indexes
+        await db.auto_link_jobs.create_index([("user_id", ASCENDING)])
+        await db.auto_link_jobs.create_index([("user_id", ASCENDING), ("status", ASCENDING)])
+        logger.info("Created indexes for 'auto_link_jobs' collection")
 
         # AniList cache collection with TTL index
         await db.anilist_cache.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
@@ -98,7 +102,7 @@ async def health_check() -> bool:
     try:
         if _client is None:
             return False
-        await _client.admin.command('ping')
+        await _client.admin.command("ping")
         return True
     except Exception as e:
         logger.error(f"Database health check failed: {e}")
