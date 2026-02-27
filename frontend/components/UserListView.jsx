@@ -137,7 +137,7 @@ export default function UserListView({ userId, onStatsLoaded }) {
     enabled: !!userId,
     select: (res) => res.data?.job ?? null,
     refetchInterval: (query) => {
-      const status = query.state.data?.status;
+      const status = query.state.data?.data?.job?.status;
       return (status === 'running' || status === 'pending') ? 2000 : false;
     },
   });
