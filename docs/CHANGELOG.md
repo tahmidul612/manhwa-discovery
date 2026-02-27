@@ -28,6 +28,12 @@ Given a version number MAJOR.MINOR.PATCH:
 [Unreleased]: https://github.com/tahmidul612/manhwa-discovery/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/tahmidul612/manhwa-discovery/releases/tag/v0.1.0
 
+## v0.3.0 (2026-02-27)
+
+### Feat
+
+- ui redesign and persistent auto-link job tracking (#3)
+
 ## v0.2.0 (2026-02-27)
 
 ### Feat
